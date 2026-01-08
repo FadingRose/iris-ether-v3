@@ -1,6 +1,7 @@
 package cmds
 
 import (
+	"encoding/hex"
 	"fadingrose/iris-ether-v3/cfg"
 	"fadingrose/iris-ether-v3/provider"
 	"os"
@@ -23,7 +24,15 @@ func Run(cmd *cobra.Command, target string, path string, timeout int) error {
 		if err != nil {
 			return err
 		}
-		bytecode, err = prov.GetRuntimeBinary(target)
+		hexcode, err := prov.GetRuntimeBinary(target)
+		if err != nil {
+			return err
+		}
+		bytecode, err = hex.DecodeString(string(hexcode))
+		if err != nil {
+			return err
+		}
+
 	} else {
 		bytecode, err = os.ReadFile(target)
 	}

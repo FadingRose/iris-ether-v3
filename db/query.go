@@ -8,12 +8,13 @@ import (
 // QueryBuilder provides a fluent API for building SQL SELECT queries based on the schema.
 // It follows a similar pattern to SchemaBuilder for consistency.
 type QueryBuilder struct {
-	schema schema
-	where  string
-	args   []any
-	order  string
-	limit  *int
-	offset *int
+	schema   schema
+	selected []string
+	where    string
+	args     []any
+	order    string
+	limit    *int
+	offset   *int
 }
 
 // NewQuery starts building a SELECT query from the schema.
@@ -27,6 +28,12 @@ func (qb *QueryBuilder) Clean() *QueryBuilder {
 	qb.order = ""
 	qb.limit = nil
 	qb.offset = nil
+	return qb
+}
+
+// Select sets the columns to be retrieved. If not called, all columns from schema are used.
+func (qb *QueryBuilder) Select(columns ...string) *QueryBuilder {
+	qb.selected = columns
 	return qb
 }
 
@@ -66,22 +73,24 @@ func (qb *QueryBuilder) Offset(n int) *QueryBuilder {
 // Returns an error if the schema is invalid.
 func (qb *QueryBuilder) Build() (string, []any, error) {
 	params := QueryParams{
-		Where:  qb.where,
-		Args:   qb.args,
-		Order:  qb.order,
-		Limit:  qb.limit,
-		Offset: qb.offset,
+		Columns: qb.selected,
+		Where:   qb.where,
+		Args:    qb.args,
+		Order:   qb.order,
+		Limit:   qb.limit,
+		Offset:  qb.offset,
 	}
 	return qb.schema.query(params)
 }
 
 // QueryParams holds parameters for building a SQL query.
 type QueryParams struct {
-	Where  string // Optional WHERE clause (e.g., "id = ? AND name = ?")
-	Args   []any  // Arguments for WHERE clause placeholders
-	Order  string // Optional ORDER BY clause (e.g., "id ASC, name DESC")
-	Limit  *int   // Optional LIMIT value
-	Offset *int   // Optional OFFSET value
+	Columns []string // Optional custom column list
+	Where   string   // Optional WHERE clause (e.g., "id = ? AND name = ?")
+	Args    []any    // Arguments for WHERE clause placeholders
+	Order   string   // Optional ORDER BY clause (e.g., "id ASC, name DESC")
+	Limit   *int     // Optional LIMIT value
+	Offset  *int     // Optional OFFSET value
 }
 
 // query builds a SELECT SQL query string and bound arguments based on the schema and query parameters.
@@ -97,8 +106,12 @@ func (s schema) query(params QueryParams) (string, []any, error) {
 
 	// Build column list from schema columns
 	var cols []string
-	for _, col := range s.columns {
-		cols = append(cols, col.identifier)
+	if len(params.Columns) > 0 {
+		cols = params.Columns
+	} else {
+		for _, col := range s.columns {
+			cols = append(cols, col.identifier)
+		}
 	}
 
 	// Start with base SELECT

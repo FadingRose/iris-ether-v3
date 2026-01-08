@@ -26,7 +26,7 @@ func NewLocalBenchmarkDB(path string) (*LocalProvider, error) {
 }
 
 func (p *LocalProvider) GetRuntimeBinary(address string) ([]byte, error) {
-	p.builder.Where("address = ?").WithArgs(address)
+	p.builder.Where("address = ?").WithArgs(address).Select("address", "runtime_bin")
 	defer p.builder.Clean()
 	query, args, err := p.builder.Build()
 	if err != nil {
@@ -37,8 +37,8 @@ func (p *LocalProvider) GetRuntimeBinary(address string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to query: %w", err)
 	}
 	if rows.Next() {
-		var data []byte
 		var address string
+		var data []byte
 		err := rows.Scan(&address, &data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
