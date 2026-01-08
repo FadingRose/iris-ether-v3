@@ -50,15 +50,7 @@ func (p *Path) weight() int {
 func (p *Path) regs() []*Reg {
 	rs := make([]*Reg, 0)
 	for _, b := range p.data {
-		for _, inst := range b.stmts {
-			rs = append(rs, &Reg{
-				inst:    inst,
-				params:  make([]*Reg, 0),
-				dupFrom: nil,
-				exec:    Executor(inst.op),
-				cfg:     nil,
-			})
-		}
+		rs = append(rs, b.regs()...)
 	}
 	return rs
 }
@@ -210,11 +202,9 @@ func (p *Path) String() string {
 			flag += "^"
 		}
 		if cnt[b.index] > 1 {
-			sb.WriteString(
-				fmt.Sprintf("[%d]", b.index))
+			fmt.Fprintf(&sb, "[%d]", b.index)
 		} else {
-			sb.WriteString(
-				fmt.Sprintf("%d", b.index))
+			fmt.Fprintf(&sb, "%d", b.index)
 		}
 		sb.WriteString(flag)
 		if i != len(p.data)-1 {

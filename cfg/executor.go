@@ -93,7 +93,7 @@ func execute(op vm.OpCode) executor {
 			// if me.params[0] == nil || me.params[1] == nil {
 			// 	return nil
 			// }
-
+			//
 			ret := uint256.NewInt(0)
 			if me.params[0].value() == nil || me.params[1].value() == nil {
 				return nil

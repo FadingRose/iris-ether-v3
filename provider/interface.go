@@ -2,6 +2,7 @@
 package provider
 
 type Provider interface {
+	GeetAddresses() ([]string, error)
 	GetRuntimeBinary(address string) ([]byte, error)
 	GetRuntimeBinaryAndProbes(address string) ([]byte, []byte, error)
 }

@@ -242,3 +242,17 @@ func (b *BasicBlock) containSuccessor(out *BasicBlock) bool {
 	}
 	return false
 }
+
+func (b *BasicBlock) regs() []*Reg {
+	rs := make([]*Reg, 0, len(b.stmts))
+	for _, inst := range b.stmts {
+		rs = append(rs, &Reg{
+			inst:    inst,
+			params:  make([]*Reg, 0),
+			dupFrom: nil,
+			exec:    Executor(inst.op),
+			cfg:     b.cfg,
+		})
+	}
+	return rs
+}

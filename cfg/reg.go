@@ -60,6 +60,37 @@ func (r *Reg) dependency() []*Reg {
 	return append(deps, r)
 }
 
+func (r *Reg) snapshot() *AbstractReg {
+	return &AbstractReg{
+		instance: r,
+		cfg:      r.cfg,
+	}
+}
+
+func (r *Reg) Equals(other *Reg) bool {
+	if r == other {
+		return true
+	}
+	if r == nil || other == nil {
+		return false
+	}
+
+	if r.inst.String() != other.inst.String() {
+		return false
+	}
+
+	if len(r.params) != len(other.params) {
+		return false
+	}
+	for i := range r.params {
+		if !r.params[i].Equals(other.params[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 type AbstractReg struct {
 	// depth int
 
@@ -67,7 +98,7 @@ type AbstractReg struct {
 	// so after stack mapping,
 	// instances[B]->Reg
 	// instances[A]->Reg
-	instances map[int32]Reg
+	instance *Reg
 
 	cfg *CFG
 }

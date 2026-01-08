@@ -25,6 +25,29 @@ func NewLocalBenchmarkDB(path string) (*LocalProvider, error) {
 	}, nil
 }
 
+func (p *LocalProvider) GeetAddresses() ([]string, error) {
+	p.builder.Select("address")
+	defer p.builder.Clean()
+	query, _, err := p.builder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+	rows, err := p.instance.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query: %w", err)
+	}
+	addresses := make([]string, 0)
+	for rows.Next() {
+		var address string
+		err := rows.Scan(&address)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		addresses = append(addresses, address)
+	}
+	return addresses, nil
+}
+
 func (p *LocalProvider) GetRuntimeBinary(address string) ([]byte, error) {
 	p.builder.Where("address = ?").WithArgs(address).Select("address", "runtime_bin")
 	defer p.builder.Clean()

@@ -3,6 +3,7 @@ package cfg
 
 import (
 	"encoding/hex"
+	"os"
 
 	// "fadingrose/iris-ether-v3/compiler"
 	"fadingrose/iris-ether-v3/vm"
@@ -562,29 +563,46 @@ func (cfg *CFG) edges() int {
 // 	return nil
 // }
 
-// func (cfg *CFG) GenerateReadableCFG(path string) error {
-// 	var sb strings.Builder
-//
-// 	sb.WriteString(cfg.Summary().String())
-// 	for _, b := range cfg.BasicBlocks {
-// 		haltFlag := ""
-// 		if b.halt {
-// 			haltFlag = "*"
-// 		}
-// 		sb.WriteString(fmt.Sprintf("Block %d%s (offset: 0x%x, visited: %d):\n", b.index, haltFlag, b.offset, b.visited))
-// 		for _, s := range b.stmts {
-// 			sb.WriteString(s.String())
-// 			sb.WriteString("\n")
-// 		}
-// 		for _, succ := range b.succs {
-// 			sb.WriteString(succ.String())
-// 			sb.WriteString("\n")
-// 		}
-// 		sb.WriteString("\n")
-// 	}
-//
-// 	return os.WriteFile(path, []byte(sb.String()), 0o644)
-// }
+func (cfg *CFG) GenerateReadableCFG(path string) error {
+	var sb strings.Builder
+
+	// sb.WriteString(cfg.Summary().String())
+	for _, b := range cfg.BasicBlocks {
+		haltFlag := ""
+		if b.halt {
+			haltFlag = "*"
+		}
+		fmt.Fprintf(&sb, "Block %d%s (offset: 0x%x, visited: %d):\n", b.index, haltFlag, b.offset, b.visited)
+		for _, s := range b.stmts {
+			sb.WriteString(s.String())
+			sb.WriteString("\n")
+		}
+		for _, succ := range b.succs {
+			sb.WriteString(succ.String())
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	return os.WriteFile(path, []byte(sb.String()), 0o644)
+}
+
+func (cfg *CFG) PrintReadableCFG() {
+	for _, b := range cfg.BasicBlocks {
+		haltFlag := ""
+		if b.halt {
+			haltFlag = "*"
+		}
+		fmt.Printf("Block %d%s (offset: 0x%x, visited: %d):\n", b.index, haltFlag, b.offset, b.visited)
+		for _, s := range b.stmts {
+			fmt.Println(s.String())
+		}
+		for _, succ := range b.succs {
+			fmt.Println(succ.String())
+		}
+		fmt.Println()
+	}
+}
 
 // func (cfg *CFG) ExportCFG(path string) error {
 // 	type block struct {
