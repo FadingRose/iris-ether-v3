@@ -84,7 +84,6 @@ func TestDTypeBlock(t *testing.T) {
 
 		entry := c.BasicBlocks[0]
 		dfs(entry, NewPath(entry))
-		fmt.Println()
 
 		// Step 3: loop until D set is empty
 		// 	for len(cb.D) > 0 {
@@ -101,8 +100,7 @@ func TestDTypeBlock(t *testing.T) {
 				continue
 			}
 
-			_, flag := snaps[path.last()].Live(last.params[0])
-			// fmt.Println(res)
+			_, _, flag := snaps[path.last()].Live(last.params[0])
 			// 如果 last 的 dest 解析的值不依赖于 S_in，那么它应当直接来源于最后一个块
 			if !flag {
 				path = NewPath(path.data[len(path.data)-1])
@@ -129,5 +127,222 @@ func TestDTypeBlock(t *testing.T) {
 			// fmt.Println(last.Expand())
 		}
 		// cb.cfg.PrintReadableCFG()
+	}
+}
+
+// 在从 entry -> D 的路径搜索上，可能存在大量 paht
+// e.g., 0x003e523dfb5d91e508745256603d222891e65828 在 TestDTypeBlock 中路径无法穷举结束
+// 需要提前测试 Liveness 的减枝 和 JumpVector 重复路径减枝针对这个 case 是否成立？
+func TestDTypeBlockWithLiveness(t *testing.T) {
+	path := "../../instrument_migrate.db"
+	prov, err := provider.NewLocalBenchmarkDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addresses, err := prov.GeetAddresses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// addresses := []string{"0x003e523dfb5d91e508745256603d222891e65828"}
+	// 0x265807d818ff14d44b552f5897abdad6eed603e2 TODO: panic at this address
+
+	for _, address := range addresses {
+		fmt.Println(address)
+		hexcode, err := prov.GetRuntimeBinary(address)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bytecode, err := hex.DecodeString(string(hexcode))
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		c := NewCFG(bytecode)
+		// Step 1: LiteralConnectSuccessors
+		c.LiteralConnectSuccessors()
+
+		liveness := NewLiveness()
+		// Collect all paths form entry to D_sets
+		var SumD []*Path
+		visited := make(map[*BasicBlock]bool)
+		// var D_Path_Found func(path *Path) bool
+		D_Path_Found := func(path *Path) bool {
+			i := NewInterpreter(path, 1024)
+			last, _, snaps, err := i.Run()
+			if err != nil {
+				fmt.Println("err", err)
+				return false
+			}
+			if last == nil {
+				fmt.Println("last is nil")
+				return false
+			}
+
+			// fmt.Println(last.Expand())
+
+			_, _, flag := snaps[path.last()].Live(last.params[0])
+			// 如果 last 的 dest 解析的值不依赖于 S_in，那么它应当直接来源于最后一个块
+			if !flag {
+				path = NewPath(path.data[len(path.data)-1])
+				i := NewInterpreter(path, 1024)
+				st := NewAnyStack(c)
+				i.SetStack(st)
+				slast, _, _, err := i.Run()
+				if err != nil {
+					fmt.Println("any test failed, err: ", err)
+					panic(fmt.Sprintf("any test failed, err: %s", address))
+					return false
+				}
+				if last.params[0].value().Uint64() != slast.params[0].value().Uint64() {
+					fmt.Println(path.String())
+					fmt.Println("any test failed, last is not last")
+					fmt.Println(last.params[0].value())
+					fmt.Println(slast.params[0].value())
+					fmt.Println(last.Expand())
+					fmt.Println(slast.Expand())
+					panic(fmt.Sprintf("any test failed, last is not last: %s", address))
+					return false
+				}
+				fmt.Println("any test passed") // TODO: add this to fixed_D set
+				return false
+			}
+
+			// flag is true，即 last 依赖输入栈
+			// 对于 path 中的每一个块，都有一个特定的 Liveness 的组合
+			// 一个 Liveness 意味着：一个块的一个特定栈状态导出到特定的 D
+			// fmt.Println(path.String())
+			dest := last.params[0].value().Uint64()
+			D_Block := path.last().index
+
+			var meaningful bool // update liveness at least once
+			for i := len(path.data) - 1; i >= 0; i-- {
+				slots, _, flag := snaps[path.data[i]].Live(last.params[0])
+				if liveness.Live(path.data[i], slots, D_Block, dest) {
+					meaningful = true
+				}
+				// fmt.Println(path.data[i].String())
+				// fmt.Println(res)
+				// fmt.Println(flag)
+				if !flag {
+					break
+				}
+			}
+			return meaningful
+		} // end of D_Path_Found()
+
+		var dfs func(bb *BasicBlock, currentPath *Path)
+		dfs = func(bb *BasicBlock, currentPath *Path) {
+			// liveness test
+			// 给定一个 path，我们需要检查它现在的输出 stack 是否命中任何一个当前 Block 的 liveness？
+			// 如果命中任何一个 liveness，那么提前减枝，并且记录到 prune 中
+			// 这里的减枝可能有精度损失，所以我们要记录原始 stack 到 prune 中，给未来提供恢复点
+
+			// 需要测试最后一个块的输入栈，因此 执行的 path 是 path[0:len(path)-1]
+			if len(currentPath.data) > 1 {
+				testPath := currentPath.copy()
+				testPath.data = testPath.data[:len(testPath.data)-1]
+				i := NewInterpreter(testPath, 1024)
+				// fmt.Println(testPath.String())
+				_, st, _, err := i.Run()
+				if err != nil {
+					return
+				}
+				// 如果 liveness 命中，记录到 prune 中并且跳出循环
+				if liveness.Check(st, currentPath, bb.index) {
+					// fmt.Println("liveness test passed, match one of the liveness")
+					return
+				}
+			}
+
+			if visited[bb] {
+				return
+			}
+			visited[bb] = true
+
+			// If this block is in D, we've found a path for sum_D
+			if bb.isContextAware() {
+				// fmt.Printf("Path: %s\nPath length: %d, Visiting: %d\n", currentPath.String(), len(currentPath.data), bb.index)
+				newPath := currentPath.copy()
+				if D_Path_Found(newPath) {
+					SumD = append(SumD, newPath)
+				}
+			}
+
+			// if len(SumD) > 10 {
+			// 	return
+			// }
+
+			for _, succ := range bb.succs {
+				newPath := currentPath.copy()
+				if succ.Dst == nil {
+					continue
+				}
+				newPath.push(succ.Dst)
+
+				// fmt.Printf("Path length: %d, Visiting: %d\n", len(newPath.data), succ.Dst.index)
+				dfs(succ.Dst, newPath)
+			}
+			visited[bb] = false
+		} // end of dfs()
+
+		entry := c.BasicBlocks[0]
+		dfs(entry, NewPath(entry))
+
+		// for _, path := range SumD {
+		// i := NewInterpreter(path, 1024)
+		// last, _, snaps, err := i.Run()
+		// if err != nil {
+		// 	fmt.Println("err", err)
+		// 	continue
+		// }
+		// if last == nil {
+		// 	fmt.Println("last is nil")
+		// 	continue
+		// }
+		//
+		// // fmt.Println(last.Expand())
+		//
+		// _, _, flag := snaps[path.last()].Live(last.params[0])
+		// // 如果 last 的 dest 解析的值不依赖于 S_in，那么它应当直接来源于最后一个块
+		// if !flag {
+		// 	path = NewPath(path.data[len(path.data)-1])
+		// 	i := NewInterpreter(path, 1024)
+		// 	st := NewAnyStack(c)
+		// 	i.SetStack(st)
+		// 	slast, _, _, err := i.Run()
+		// 	if err != nil {
+		// 		fmt.Println("any test failed, err: ", err)
+		// 		continue
+		// 	}
+		// 	if last.params[0].value().Uint64() != slast.params[0].value().Uint64() {
+		// 		fmt.Println(path.String())
+		// 		fmt.Println("any test failed, last is not last")
+		// 		fmt.Println(last.params[0].value())
+		// 		fmt.Println(slast.params[0].value())
+		// 		fmt.Println(last.Expand())
+		// 		fmt.Println(slast.Expand())
+		// 		continue
+		// 	}
+		// 	fmt.Println("any test passed")
+		// 	continue
+		// }
+		//
+		// fmt.Println(path.String())
+		// // 对于 path 中的每一个块，都有一个特定的 Liveness 的组合
+		// // 一个 Liveness 意味着：一个块的一个特定栈状态导出到特定的 D
+		// dest := last.params[0].value().Uint64()
+		// D_Block := path.last().index
+		// for i := len(path.data) - 1; i >= 0; i-- {
+		// 	slots, _, flag := snaps[path.data[i]].Live(last.params[0])
+		// 	liveness.Live(path.data[i], slots, D_Block, dest)
+		// 	// fmt.Println(path.data[i].String())
+		// 	// fmt.Println(res)
+		// 	// fmt.Println(flag)
+		// 	if !flag {
+		// 		break
+		// 	}
+		// }
+		// }
 	}
 }

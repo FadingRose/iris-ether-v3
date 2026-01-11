@@ -2,9 +2,10 @@ package cfg
 
 import (
 	"errors"
-	"fadingrose/iris-ether-v3/vm"
 	"fmt"
 	"strings"
+
+	"fadingrose/iris-ether-v3/vm"
 )
 
 // Stack is a generic LIFO stack.
@@ -16,44 +17,42 @@ type Snapshot struct {
 	items []*AbstractReg
 }
 
-func (s *Snapshot) Live(last *Reg) (string, bool) {
+func (s *Snapshot) Live(last *Reg) (map[int]string, string, bool) {
 	if len(s.items) == 0 {
-		return "Snapshot: []", false
+		return nil, "Snapshot: []", false
 	}
 	for last.dupFrom != nil {
 		last = last.dupFrom
 	}
+
+	liveness := make(map[int]string, 0)
+
 	var sb strings.Builder
 	sb.WriteString("Snapshot:\n")
 	flag := false
 	for i := len(s.items) - 1; i >= 0; i-- {
 		height := len(s.items) - 1 - i
 		reg := s.items[i].instance
-		opName := "nil"
-		// if reg.inst != nil {
-		// 	opName = reg.expand("    ")
-		// }
-		// if reg.Equals(last) {
-
-		// for reg.dupFrom != nil {
-		// 	reg = reg.dupFrom
-		// 	opName = reg.inst.String()
-		// }
-
-		// fmt.Println(reg.inst.String(), " ", last.inst.String())
+		for reg.dupFrom != nil {
+			reg = reg.dupFrom
+		}
+		instruction := ""
 		if reg.inst == nil {
 			fmt.Fprintf(&sb, "[%d] nil\n", height)
 			continue
+		} else {
+			instruction = reg.inst.String()
 		}
 
 		if reg.inst.String() == last.inst.String() {
-			fmt.Fprintf(&sb, "[%d]* %s\n", height, opName)
+			fmt.Fprintf(&sb, "[%d]* %s\n", height, instruction)
+			liveness[height] = instruction
 			flag = true
 		} else {
-			fmt.Fprintf(&sb, "[%d] %s\n", height, opName)
+			fmt.Fprintf(&sb, "[%d] %s\n", height, instruction)
 		}
 	}
-	return sb.String(), flag
+	return liveness, sb.String(), flag
 }
 
 func (s *Snapshot) String(last *Reg) string {
@@ -142,6 +141,13 @@ func (s *Stack) Snapshot() *Snapshot {
 		snapshot.items[i] = item.snapshot()
 	}
 	return snapshot
+}
+
+func (s *Stack) GetAtPosition(pos int) *Reg {
+	if len(s.items) == 0 || pos >= len(s.items) || pos < 0 {
+		return nil
+	}
+	return s.items[pos]
 }
 
 // Push adds an item to the top of the stack.

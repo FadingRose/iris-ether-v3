@@ -2,9 +2,10 @@ package cfg
 
 import (
 	"encoding/hex"
-	"fadingrose/iris-ether-v3/vm"
 	"fmt"
 	"strings"
+
+	"fadingrose/iris-ether-v3/vm"
 )
 
 type BasicBlock struct {
@@ -255,4 +256,23 @@ func (b *BasicBlock) regs() []*Reg {
 		})
 	}
 	return rs
+}
+
+func (b *BasicBlock) String() string {
+	var sb strings.Builder
+	haltFlag := ""
+	if b.halt {
+		haltFlag = "*"
+	}
+	fmt.Fprintf(&sb, "Block %d%s (offset: 0x%x, visited: %d):\n", b.index, haltFlag, b.offset, b.visited)
+	for _, s := range b.stmts {
+		sb.WriteString(s.String())
+		sb.WriteString("\n")
+	}
+	for _, succ := range b.succs {
+		sb.WriteString(succ.String())
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n")
+	return sb.String()
 }

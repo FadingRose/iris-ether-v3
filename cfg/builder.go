@@ -104,7 +104,7 @@ func (cb *CFGBuilder) build(limit int, maxStackSize int) {
 			continue
 		}
 
-		_, flag := snaps[path.last()].Live(last.params[0])
+		_, _, flag := snaps[path.last()].Live(last.params[0])
 		// fmt.Println(res)
 		// 如果 last 的 dest 解析的值不依赖于 S_in，那么它应当直接来源于最后一个块
 		if !flag {
