@@ -2,10 +2,9 @@ package cfg
 
 import (
 	"encoding/hex"
+	"fadingrose/iris-ether-v3/provider"
 	"fmt"
 	"testing"
-
-	"fadingrose/iris-ether-v3/provider"
 )
 
 // Sum_D and Fix_D test
@@ -144,8 +143,20 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// addresses := []string{"0x003e523dfb5d91e508745256603d222891e65828"}
-	// 0x265807d818ff14d44b552f5897abdad6eed603e2 TODO: panic at this address
+	// addresses := []string{"0x152df2cb3868bef5c6ed6b9feb0fb091c9e11a96"}
+
+	//  DONE: panic at this address
+	// 0x265807d818ff14d44b552f5897abdad6eed603e2
+	// last.params[0].value() is nil
+	// 0 -> 2 -> 3 -> 26 -> 37 -> 38 -> 39 -> 40 -> 41 -> 68 -> 221 -> 223 -> 226 -> 232 -> 233^
+	// 0xf37(3895) JUMP
+	// ├── 0x1f(31) SHR
+	// │   ├── 0x1c(28) CALLDATALOAD
+	// │   │   ├── 0x1a(26) PUSH1 0x00
+	// │   ├── 0x1d(29) PUSH1 0xe0
+	//
+	// 0x152df2cb3868bef5c6ed6b9feb0fb091c9e11a96  DONE: stuck at here
+	// INVALID 不一定截断 code，offset 也可能失效，validDest 也可能不考虑 offset
 
 	for _, address := range addresses {
 		fmt.Println(address)
@@ -161,6 +172,8 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 		c := NewCFG(bytecode)
 		// Step 1: LiteralConnectSuccessors
 		c.LiteralConnectSuccessors()
+
+		// c.PrintReadableCFG()
 
 		liveness := NewLiveness()
 		// Collect all paths form entry to D_sets
@@ -204,7 +217,7 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 					panic(fmt.Sprintf("any test failed, last is not last: %s", address))
 					return false
 				}
-				fmt.Println("any test passed") // TODO: add this to fixed_D set
+				fmt.Println(address, ": any test passed") // TODO: add this to fixed_D set
 				return false
 			}
 
@@ -212,6 +225,12 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 			// 对于 path 中的每一个块，都有一个特定的 Liveness 的组合
 			// 一个 Liveness 意味着：一个块的一个特定栈状态导出到特定的 D
 			// fmt.Println(path.String())
+			if last.params[0].value() == nil {
+				fmt.Println("last.params[0].value() is nil")
+				fmt.Println(path.String())
+				fmt.Println(last.Expand())
+				return false
+			}
 			dest := last.params[0].value().Uint64()
 			D_Block := path.last().index
 
@@ -231,12 +250,28 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 			return meaningful
 		} // end of D_Path_Found()
 
+		// T_Path_Found := func(path *Path) bool {
+		// 	if !path.data[len(path.data)-1].LastStmt().op.IsHalt() {
+		// 		return false
+		// 	}
+		// 	i := NewInterpreter(path, 1024)
+		// 	last, _, _, err := i.Run()
+		// 	if err != nil {
+		// 		return false
+		// 	}
+		// 	if last == nil {
+		// 		return false
+		// 	}
+		// 	return true
+		// }
+
 		var dfs func(bb *BasicBlock, currentPath *Path)
 		dfs = func(bb *BasicBlock, currentPath *Path) {
 			// liveness test
 			// 给定一个 path，我们需要检查它现在的输出 stack 是否命中任何一个当前 Block 的 liveness？
 			// 如果命中任何一个 liveness，那么提前减枝，并且记录到 prune 中
-			// 这里的减枝可能有精度损失，所以我们要记录原始 stack 到 prune 中，给未来提供恢复点
+			// 这里的减枝可能有精度损失，所以我们要记录原始 stack 到 p1)
+			// fmt.Println(currentPath.String())
 
 			// 需要测试最后一个块的输入栈，因此 执行的 path 是 path[0:len(path)-1]
 			if len(currentPath.data) > 1 {
@@ -253,6 +288,11 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 					// fmt.Println("liveness test passed, match one of the liveness")
 					return
 				}
+			}
+
+			if bb.isLeadingHalt() {
+				// fmt.Println("leading halt")
+				return
 			}
 
 			if visited[bb] {
@@ -289,60 +329,5 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 		entry := c.BasicBlocks[0]
 		dfs(entry, NewPath(entry))
 
-		// for _, path := range SumD {
-		// i := NewInterpreter(path, 1024)
-		// last, _, snaps, err := i.Run()
-		// if err != nil {
-		// 	fmt.Println("err", err)
-		// 	continue
-		// }
-		// if last == nil {
-		// 	fmt.Println("last is nil")
-		// 	continue
-		// }
-		//
-		// // fmt.Println(last.Expand())
-		//
-		// _, _, flag := snaps[path.last()].Live(last.params[0])
-		// // 如果 last 的 dest 解析的值不依赖于 S_in，那么它应当直接来源于最后一个块
-		// if !flag {
-		// 	path = NewPath(path.data[len(path.data)-1])
-		// 	i := NewInterpreter(path, 1024)
-		// 	st := NewAnyStack(c)
-		// 	i.SetStack(st)
-		// 	slast, _, _, err := i.Run()
-		// 	if err != nil {
-		// 		fmt.Println("any test failed, err: ", err)
-		// 		continue
-		// 	}
-		// 	if last.params[0].value().Uint64() != slast.params[0].value().Uint64() {
-		// 		fmt.Println(path.String())
-		// 		fmt.Println("any test failed, last is not last")
-		// 		fmt.Println(last.params[0].value())
-		// 		fmt.Println(slast.params[0].value())
-		// 		fmt.Println(last.Expand())
-		// 		fmt.Println(slast.Expand())
-		// 		continue
-		// 	}
-		// 	fmt.Println("any test passed")
-		// 	continue
-		// }
-		//
-		// fmt.Println(path.String())
-		// // 对于 path 中的每一个块，都有一个特定的 Liveness 的组合
-		// // 一个 Liveness 意味着：一个块的一个特定栈状态导出到特定的 D
-		// dest := last.params[0].value().Uint64()
-		// D_Block := path.last().index
-		// for i := len(path.data) - 1; i >= 0; i-- {
-		// 	slots, _, flag := snaps[path.data[i]].Live(last.params[0])
-		// 	liveness.Live(path.data[i], slots, D_Block, dest)
-		// 	// fmt.Println(path.data[i].String())
-		// 	// fmt.Println(res)
-		// 	// fmt.Println(flag)
-		// 	if !flag {
-		// 		break
-		// 	}
-		// }
-		// }
 	}
 }

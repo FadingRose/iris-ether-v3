@@ -3,14 +3,14 @@ package cfg
 
 import (
 	"encoding/hex"
-	"os"
-
-	// "fadingrose/iris-ether-v3/compiler"
-	"fadingrose/iris-ether-v3/vm"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	// "fadingrose/iris-ether-v3/compiler"
+	"fadingrose/iris-ether-v3/vm"
 )
 
 type CFG struct {
@@ -90,6 +90,10 @@ func NewCFG(bytecode []byte) *CFG {
 				cfg.validDestMap[offset] = make(map[uint64]*BasicBlock)
 			}
 			cfg.validDestMap[offset][it.PC()-offset] = cur
+			if cfg.validDestMap[uint64(0)] == nil {
+				cfg.validDestMap[uint64(0)] = make(map[uint64]*BasicBlock)
+			}
+			cfg.validDestMap[uint64(0)][it.PC()] = cur
 		}
 	}
 
@@ -235,6 +239,9 @@ func (cfg *CFG) verifyDestPush(ins *instruction) bool {
 		return false
 	}
 	if _, exist := cfg.validDestMap[ins.offset][ins.Value().Uint64()]; exist {
+		return true
+	}
+	if _, exist := cfg.validDestMap[uint64(0)][ins.Value().Uint64()]; exist {
 		return true
 	}
 	return false

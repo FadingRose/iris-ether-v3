@@ -1,8 +1,9 @@
 package cfg
 
 import (
-	"fadingrose/iris-ether-v3/vm"
 	"fmt"
+
+	"fadingrose/iris-ether-v3/vm"
 
 	"github.com/holiman/uint256"
 )
@@ -55,6 +56,10 @@ func (i *instruction) String() string {
 	coverStr := ""
 
 	return fmt.Sprintf("0x%x(%d) %s %s %s", i.pc, i.pc, i.op.String(), argStr, coverStr)
+}
+
+func (i *instruction) isHalt() bool {
+	return i.op == vm.STOP || i.op == vm.RETURN || i.op == vm.REVERT || i.op == vm.INVALID || i.op == vm.SELFDESTRUCT
 }
 
 type InstructionIterator struct {
