@@ -611,6 +611,13 @@ func (cfg *CFG) PrintReadableCFG() {
 	}
 }
 
+func (cfg *CFG) CFGBuilder() *CFGBuilder {
+	if cfg.builder == nil {
+		cfg.builder = NewCFGBuilder(cfg)
+	}
+	return cfg.builder
+}
+
 // func (cfg *CFG) ExportCFG(path string) error {
 // 	type block struct {
 // 		Index   int32    `json:"index"`

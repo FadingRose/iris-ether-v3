@@ -1,6 +1,8 @@
 package cfg
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -216,6 +218,19 @@ func (s *Stack) PushN(r *Reg, n int) {
 	for i := 0; i < n; i++ {
 		s.Push(r)
 	}
+}
+
+func (s *Stack) Hash() string {
+	h := sha256.New()
+	for _, reg := range s.items {
+		if reg.value() != nil {
+			h.Write([]byte(reg.value().String()))
+		} else {
+			h.Write([]byte("nil"))
+		}
+		h.Write([]byte("|"))
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (s *Stack) String() string {
