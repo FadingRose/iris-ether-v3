@@ -1,9 +1,11 @@
 package cfg
 
 import (
-	"fadingrose/iris-ether-v3/vm"
 	"fmt"
+	"strconv"
 	"strings"
+
+	"fadingrose/iris-ether-v3/vm"
 )
 
 type Path struct {
@@ -24,6 +26,33 @@ func NewPath(data *BasicBlock) *Path {
 
 		terminated: false,
 	}
+}
+
+func NewPathFromString(data string, blocks []*BasicBlock) *Path {
+	p := &Path{
+		data:       make([]*BasicBlock, 0),
+		parent:     nil,
+		children:   make([]*Path, 0),
+		terminated: false,
+	}
+	for _, b := range strings.Split(data, " -> ") {
+		b = strings.TrimSpace(b)
+		b = strings.TrimRight(b, "^")
+		b = strings.TrimLeft(b, "*")
+		b = strings.Trim(b, "[]")
+		if b == "" {
+			continue
+		}
+		index, err := strconv.ParseInt(b, 10, 64)
+		if err != nil {
+			continue
+		}
+		if index < 0 || index >= int64(len(blocks)) {
+			continue
+		}
+		p.data = append(p.data, blocks[index])
+	}
+	return p
 }
 
 func (p *Path) weight() int {
@@ -55,47 +84,62 @@ func (p *Path) regs() []*Reg {
 	return rs
 }
 
-func (p *Path) fork() (p1 *Path, p2 *Path) {
-	p1 = p
-	p2 = &Path{
-		data: make([]*BasicBlock, len(p.data)),
+func (p *Path) fork(succs []*BasicBlock) []*Path {
+	var paths []*Path
+	for _, succ := range succs {
+		p1 := &Path{
+			data:       make([]*BasicBlock, len(p.data)),
+			parent:     p,
+			children:   make([]*Path, 0),
+			terminated: p.terminated,
+		}
+		copy(p1.data, p.data)
+		p1.push(succ)
+		paths = append(paths, p1)
 	}
-	copy(p2.data, p1.data)
-	return p1, p2
+	return paths
 }
 
-func (p *Path) fork2() (p1 *Path, p2 *Path) {
-	p1 = &Path{
-		data:       make([]*BasicBlock, len(p.data)),
-		parent:     p,
-		children:   make([]*Path, 0),
-		terminated: false,
-	}
-	p2 = &Path{
-		data:       make([]*BasicBlock, len(p.data)),
-		parent:     p,
-		children:   make([]*Path, 0),
-		terminated: false,
-	}
-	copy(p1.data, p.data)
-	copy(p2.data, p.data)
-
-	p.children = append(p.children, p1, p2)
-	return p1, p2
-}
-
-func (p *Path) fork1() (p1 *Path) {
-	p1 = &Path{
-		data:       make([]*BasicBlock, len(p.data)),
-		parent:     p,
-		children:   make([]*Path, 0),
-		terminated: false,
-	}
-	copy(p1.data, p.data)
-	p.children = append(p.children, p1)
-	return p1
-}
-
+//	func (p *Path) fork() (p1 *Path, p2 *Path) {
+//		p1 = p
+//		p2 = &Path{
+//			data: make([]*BasicBlock, len(p.data)),
+//		}
+//		copy(p2.data, p1.data)
+//		return p1, p2
+//	}
+//
+//	func (p *Path) fork2() (p1 *Path, p2 *Path) {
+//		p1 = &Path{
+//			data:       make([]*BasicBlock, len(p.data)),
+//			parent:     p,
+//			children:   make([]*Path, 0),
+//			terminated: false,
+//		}
+//		p2 = &Path{
+//			data:       make([]*BasicBlock, len(p.data)),
+//			parent:     p,
+//			children:   make([]*Path, 0),
+//			terminated: false,
+//		}
+//		copy(p1.data, p.data)
+//		copy(p2.data, p.data)
+//
+//		p.children = append(p.children, p1, p2)
+//		return p1, p2
+//	}
+//
+//	func (p *Path) fork1() (p1 *Path) {
+//		p1 = &Path{
+//			data:       make([]*BasicBlock, len(p.data)),
+//			parent:     p,
+//			children:   make([]*Path, 0),
+//			terminated: false,
+//		}
+//		copy(p1.data, p.data)
+//		p.children = append(p.children, p1)
+//		return p1
+//	}
 func (p *Path) copy() *Path {
 	p1 := &Path{
 		data:     make([]*BasicBlock, len(p.data)),
@@ -239,4 +283,17 @@ func (p *Path) containsHalt() bool {
 		}
 	}
 	return false
+}
+
+func (p *Path) LeadingLoop() (*BasicBlock, bool) {
+	if len(p.data) < 2 {
+		return nil, false
+	}
+	last := p.data[len(p.data)-1]
+	for i := len(p.data) - 2; i >= 0; i-- {
+		if p.data[i].index == last.index {
+			return p.data[i], true
+		}
+	}
+	return nil, false
 }
