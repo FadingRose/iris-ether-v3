@@ -102,7 +102,7 @@ func NewCFG(bytecode []byte) *CFG {
 	}
 
 	if len(cfg.BasicBlocks) == 0 {
-		panic("no basic block found")
+		return nil
 	}
 	return cfg
 }
