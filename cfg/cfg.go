@@ -267,7 +267,7 @@ func (cfg *CFG) Build(limit int, max_stack_size int, timeout int, visul bool) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			builder.build(limit, max_stack_size)
+			builder.Build(nil, limit, max_stack_size)
 		}()
 		select {
 		case <-done:
@@ -277,7 +277,7 @@ func (cfg *CFG) Build(limit int, max_stack_size int, timeout int, visul bool) {
 			break
 		}
 	} else {
-		builder.build(limit, max_stack_size)
+		builder.Build(nil, limit, max_stack_size)
 	}
 
 	// Record duration
