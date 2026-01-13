@@ -11,6 +11,10 @@ type Liveness struct {
 	pruned map[int32]map[*Path]*live
 }
 
+func (l *Liveness) ContainsLive(b *BasicBlock) bool {
+	return len(l.lives[b.index]) > 0
+}
+
 type live struct {
 	slots    map[int]string
 	indicate map[int32]uint64 // map[D_Block]dest

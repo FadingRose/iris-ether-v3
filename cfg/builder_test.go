@@ -322,10 +322,6 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 				}
 			}
 
-			// if len(SumD) > 10 {
-			// 	return
-			// }
-
 			for _, succ := range bb.succs {
 				newPath := currentPath.copy()
 				if succ.Dst == nil {
@@ -352,15 +348,14 @@ func TestCFGBuilder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// addresses, err := prov.GeetAddresses()
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
+	addresses, err := prov.GeetAddresses()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	addresses := []string{"0x103a9d0ee6fdc4762ec08172ff0881ebb68c73c8"}
+	// addresses := []string{"0x103a9d0ee6fdc4762ec08172ff0881ebb68c73c8"}
 
 	for _, address := range addresses {
-		fmt.Println(address)
 		hexcode, err := prov.GetRuntimeBinary(address)
 		if err != nil {
 			t.Fatal(err)
@@ -375,8 +370,10 @@ func TestCFGBuilder(t *testing.T) {
 		if c == nil {
 			continue
 		}
-		c.PrintReadableCFG()
-		p := NewPathFromString("0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 71 -> 73 -> 122", c.BasicBlocks)
-		c.CFGBuilder().Build(p, 1, 1024)
+		// p := NewPathFromString("0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 71 -> 73 -> 122", c.BasicBlocks)
+		c.CFGBuilder().Build(nil, 1, 1024)
+		cover, total := c.coverage()
+		fmt.Printf("%s: %d/%d\n", address, cover, total)
+		// c.PrintReadableCFG()
 	}
 }

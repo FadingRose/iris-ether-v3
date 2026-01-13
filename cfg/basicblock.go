@@ -56,8 +56,8 @@ func (b *BasicBlock) LastSecondStmt() *instruction {
 }
 
 func (b *BasicBlock) AppendSuccessor(succ *BasicBlock, typ SuccType) bool {
-	b.visited++
-	succ.visited++
+	// b.visited++
+	// succ.visited++
 	return b.appendSuccessor(succ, typ, nil)
 }
 

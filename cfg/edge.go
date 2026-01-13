@@ -14,6 +14,7 @@ const (
 	Oracle
 	Symbolic // dest relies on symbolic resolving
 	ContextAware
+	MustJump
 
 	Broken
 	Leverage  // indicates header to tail
@@ -70,6 +71,8 @@ func (s SuccType) String() string {
 		return "Leverage"
 	case Arbitrary:
 		return "Arbitrary"
+	case MustJump:
+		return "MustJump"
 	default:
 		return "Unknown"
 	}
@@ -99,6 +102,8 @@ func ToEdgeType(s string) SuccType {
 		return Leverage
 	case "Arbitrary":
 		return Arbitrary
+	case "MustJump":
+		return MustJump
 	default:
 		return Any
 	}

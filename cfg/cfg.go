@@ -361,30 +361,31 @@ func (s Summary) ProfileString() string {
 	var builder strings.Builder
 	builder.WriteString("Profile per second:\n")
 	for i, p := range s.Profile {
-		builder.WriteString(fmt.Sprintf("  Second %d: %.2f%%\n", i+1, p))
+		fmt.Fprintf(&builder, "  Second %d: %.2f%%\n", i+1, p)
 	}
 	return builder.String()
 }
 
 func (cfg *CFG) coverage() (int, int) {
-	var covered, total int
-	for _, b := range cfg.BasicBlocks {
-		if b.visited > 0 {
-			covered++
+	entry := cfg.BasicBlocks[0]
+	visited := make(map[int32]bool)
+	var dfs func(bb *BasicBlock)
+	dfs = func(bb *BasicBlock) {
+		visited[bb.index] = true
+		bb.visited++
+		for _, succ := range bb.succs {
+			if succ.Dst == nil {
+				continue
+			}
+			if visited[succ.Dst.index] {
+				continue
+			}
+			dfs(succ.Dst)
 		}
 	}
+	dfs(entry)
 
-	afterInvalid := false
-	for _, b := range cfg.BasicBlocks {
-		if len(b.stmts) == 1 && b.stmts[0].op == vm.INVALID {
-			total = int(b.index)
-		}
-		if afterInvalid && b.visited > 0 {
-			total++
-		}
-	}
-
-	return covered, total
+	return len(visited), len(cfg.BasicBlocks)
 }
 
 func (cfg *CFG) edges() int {
