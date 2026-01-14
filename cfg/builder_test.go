@@ -374,6 +374,6 @@ func TestCFGBuilder(t *testing.T) {
 		c.CFGBuilder().Build(nil, 1, 1024)
 		cover, total := c.coverage()
 		fmt.Printf("%s: %d/%d\n", address, cover, total)
-		// c.PrintReadableCFG()
+		c.PrintReadableCFG()
 	}
 }

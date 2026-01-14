@@ -76,6 +76,10 @@ func (l *Liveness) Check(st *Stack, path *Path, index int32) bool {
 		}
 		match = match || m
 		if match {
+			// if path.last().index == 2019 { // TEMP
+			// 	fmt.Println(st.String())
+			// 	fmt.Printf("Liveness matched at block %d:\n%s\n", index, live.String())
+			// }
 			l.pruned[index][path] = live
 			break
 		}

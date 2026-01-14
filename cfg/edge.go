@@ -36,9 +36,9 @@ func (e Edge) String() string {
 		if e.VisitCount > 100 {
 			lastpaths := ""
 			e.LastPaths = e.LastPaths[len(e.LastPaths)-10:]
-			for _, p := range e.LastPaths {
-				lastpaths += p.String() + "\n"
-			}
+			// for _, p := range e.LastPaths {
+			// 	lastpaths += p.String() + "\n"
+			// }
 			return fmt.Sprintf("%s%d -> %d, !%s [%d] %s\n%s", indent, e.Src.index, e.Dst.index, e.Typ.String(), e.VisitCount, e.DiscoverPath, lastpaths)
 		} else {
 			return fmt.Sprintf("%s%d -> %d, %s [%d] %s", indent, e.Src.index, e.Dst.index, e.Typ.String(), e.VisitCount, e.DiscoverPath)

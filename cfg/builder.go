@@ -301,112 +301,116 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 	D_Block := path.last().index
 	for i := len(path.data) - 1; i >= 0; i-- {
 		slots, _, f := snaps[path.data[i]].Live(last.params[0])
-		cb.Liveness.Live(path.data[i], slots, D_Block, destU64)
 		if !f {
 			break
 		}
+		cb.Liveness.Live(path.data[i], slots, D_Block, destU64)
+		// if path.data[i].index == 2019 { // TEMP
+		// 	fmt.Println(res)
+		// 	fmt.Println(slots)
+		// }
 	}
 
-	path.last().AppendSuccessor(dest, Jump)
+	path.last().AppendSuccessor(dest, ContextAware)
 	cb.SumD.Insert(path)
 
 	return []*BasicBlock{dest}, nil
 }
 
 // deprecated: use executeDPath()
-func (cb *CFGBuilder) DPathFound(path *Path) bool {
-	i := NewInterpreter(path, 1024)
-	last, _, snaps, err := i.Run()
-	if err != nil {
-		fmt.Println("err", err)
-		return false
-	}
-	if last == nil {
-		fmt.Println("last is nil")
-		return false
-	}
-
-	// fmt.Println(last.Expand())
-
-	_, _, flag := snaps[path.last()].Live(last.params[0])
-
-	// 如果 last 的 dest 解析的值不依赖于 S_in，那么它应当直接来源于最后一个块
-	// fmt.Println(path.String())
-	// flag is false, 即 last 不依赖于输入栈
-	// 此时应当断言它为 MustJump
-	if !flag {
-		path = NewPath(path.data[len(path.data)-1])
-		i := NewInterpreter(path, 1024)
-		anyst := NewAnyStack(cb.cfg)
-		i.SetStack(anyst)
-		slast, _, _, err := i.Run()
-		if err != nil {
-			fmt.Println("any test failed, err: ", err)
-			// panic(fmt.Sprintf("any test failed, err: %s", address))
-			return false
-		}
-		if last.params[0].value().Uint64() != slast.params[0].value().Uint64() {
-			fmt.Println(path.String())
-			fmt.Println("any test failed, last is not last")
-			fmt.Println(last.params[0].value())
-			fmt.Println(slast.params[0].value())
-			fmt.Println(last.Expand())
-			fmt.Println(slast.Expand())
-			panic("any test failed, last is not last")
-			return false
-		}
-		// fmt.Println("any test passed") // TODO: add this to fixed_D set
-		// NOTE: append a JUMP edge
-
-		dstU64 := last.params[0].value().Uint64()
-		dst := cb.cfg.verifyDest(dstU64)
-		if dst == nil {
-			panic("verifyDest failed")
-		}
-
-		// duplicated := cb.StateMap.Insert(dst, st.Hash(), dstU64, path)
-		// if !duplicated {
-		// 	path.last().AppendSuccessor(dst, MustJump)
-		// }
-		// // path.last().AppendSuccessor(dst, MustJump)
-		return false
-	}
-
-	// flag is true，即 last 依赖输入栈
-	// 对于 path 中的每一个块，都有一个特定的 Liveness 的组合
-	// 一个 Liveness 意味着：一个块的一个特定栈状态导出到特定的 D
-	// fmt.Println(path.String())
-	if last.params[0].value() == nil {
-		fmt.Println("last.params[0].value() is nil")
-		fmt.Println(path.String())
-		fmt.Println(last.Expand())
-		return false
-	}
-	dest := last.params[0].value().Uint64()
-	D_Block := path.last().index
-
-	var meaningful bool // update liveness at least once
-	for i := len(path.data) - 1; i >= 0; i-- {
-		slots, _, flag := snaps[path.data[i]].Live(last.params[0])
-		if cb.Liveness.Live(path.data[i], slots, D_Block, dest) {
-			meaningful = true
-		}
-		// fmt.Println(path.data[i].String())
-		// fmt.Println(res)
-		// fmt.Println(flag)
-		if !flag {
-			// fmt.Printf("cutoff at block %d of path %s\n", path.data[i].index, path.String())
-			break
-		}
-	}
-
-	// duplicated := cb.StateMap.Insert(path.last(), st.Hash(), path.last().Pc(), path)
-	// if !duplicated {
-	// 	path.last().AppendSuccessor(path.last(), ContextAware)
-	// }
-	//
-	return meaningful
-}
+// func (cb *CFGBuilder) DPathFound(path *Path) bool {
+// 	i := NewInterpreter(path, 1024)
+// 	last, _, snaps, err := i.Run()
+// 	if err != nil {
+// 		fmt.Println("err", err)
+// 		return false
+// 	}
+// 	if last == nil {
+// 		fmt.Println("last is nil")
+// 		return false
+// 	}
+//
+// 	// fmt.Println(last.Expand())
+//
+// 	_, _, flag := snaps[path.last()].Live(last.params[0])
+//
+// 	// 如果 last 的 dest 解析的值不依赖于 S_in，那么它应当直接来源于最后一个块
+// 	// fmt.Println(path.String())
+// 	// flag is false, 即 last 不依赖于输入栈
+// 	// 此时应当断言它为 MustJump
+// 	if !flag {
+// 		path = NewPath(path.data[len(path.data)-1])
+// 		i := NewInterpreter(path, 1024)
+// 		anyst := NewAnyStack(cb.cfg)
+// 		i.SetStack(anyst)
+// 		slast, _, _, err := i.Run()
+// 		if err != nil {
+// 			fmt.Println("any test failed, err: ", err)
+// 			// panic(fmt.Sprintf("any test failed, err: %s", address))
+// 			return false
+// 		}
+// 		if last.params[0].value().Uint64() != slast.params[0].value().Uint64() {
+// 			fmt.Println(path.String())
+// 			fmt.Println("any test failed, last is not last")
+// 			fmt.Println(last.params[0].value())
+// 			fmt.Println(slast.params[0].value())
+// 			fmt.Println(last.Expand())
+// 			fmt.Println(slast.Expand())
+// 			panic("any test failed, last is not last")
+// 			return false
+// 		}
+// 		// fmt.Println("any test passed") // TODO: add this to fixed_D set
+// 		// NOTE: append a JUMP edge
+//
+// 		dstU64 := last.params[0].value().Uint64()
+// 		dst := cb.cfg.verifyDest(dstU64)
+// 		if dst == nil {
+// 			panic("verifyDest failed")
+// 		}
+//
+// 		// duplicated := cb.StateMap.Insert(dst, st.Hash(), dstU64, path)
+// 		// if !duplicated {
+// 		// 	path.last().AppendSuccessor(dst, MustJump)
+// 		// }
+// 		// // path.last().AppendSuccessor(dst, MustJump)
+// 		return false
+// 	}
+//
+// 	// flag is true，即 last 依赖输入栈
+// 	// 对于 path 中的每一个块，都有一个特定的 Liveness 的组合
+// 	// 一个 Liveness 意味着：一个块的一个特定栈状态导出到特定的 D
+// 	// fmt.Println(path.String())
+// 	if last.params[0].value() == nil {
+// 		fmt.Println("last.params[0].value() is nil")
+// 		fmt.Println(path.String())
+// 		fmt.Println(last.Expand())
+// 		return false
+// 	}
+// 	dest := last.params[0].value().Uint64()
+// 	D_Block := path.last().index
+//
+// 	var meaningful bool // update liveness at least once
+// 	for i := len(path.data) - 1; i >= 0; i-- {
+// 		slots, _, flag := snaps[path.data[i]].Live(last.params[0])
+// 		if cb.Liveness.Live(path.data[i], slots, D_Block, dest) {
+// 			meaningful = true
+// 		}
+// 		// fmt.Println(path.data[i].String())
+// 		// fmt.Println(res)
+// 		// fmt.Println(flag)
+// 		if !flag {
+// 			// fmt.Printf("cutoff at block %d of path %s\n", path.data[i].index, path.String())
+// 			break
+// 		}
+// 	}
+//
+// 	// duplicated := cb.StateMap.Insert(path.last(), st.Hash(), path.last().Pc(), path)
+// 	// if !duplicated {
+// 	// 	path.last().AppendSuccessor(path.last(), ContextAware)
+// 	// }
+// 	//
+// 	return meaningful
+// }
 
 func (cb *CFGBuilder) LiveCheck(path *Path) bool {
 	// 需要测试最后一个块的输入栈，因此 执行的 path 是 path[0:len(path)-1]
@@ -443,19 +447,35 @@ func (cb *CFGBuilder) Build(path *Path, limit int, maxStackSize int) {
 }
 
 func (cb *CFGBuilder) build(pathList []*Path) {
+	var dbstr string
+	dprint := func(content string, flush bool, clean bool) {
+		if clean {
+			dbstr = ""
+			return
+		}
+		dbstr += content
+		if flush {
+			fmt.Println(dbstr)
+			dbstr = ""
+			return
+		}
+	}
+
 	var cnt int
 	for len(pathList) > 0 {
 		curPath := pathList[0]
 		pathList = pathList[1:]
-
+		dprint(curPath.String(), false, false)
 		// fmt.Println(curPath.String())
 
 		// halt check
 		if curPath.last().isLeadingHalt() {
+			dprint("[halt]", true, false)
 			continue
 		}
 
 		if cb.LiveCheck(curPath) {
+			dprint("[liveness]", true, false)
 			continue
 		}
 
@@ -476,7 +496,8 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		header, isloop := curPath.LeadingLoop()
 		if isloop {
 			if !cb.Liveness.ContainsLive(header) {
-				fmt.Println("loop header not contains live")
+				dprint("[loop header not contains live]", true, false)
+				// fmt.Println("loop header not contains live")
 				continue
 			}
 		}
@@ -484,6 +505,7 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		succ, err := cb.execute(curPath)
 		if err != nil {
 			// fmt.Println(err)
+			dprint(fmt.Sprintf("[execute error: %s]", err), true, false)
 			continue
 		}
 		// fmt.Println(succ)
@@ -493,6 +515,7 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		}
 
 		cnt++
+		dprint("", true, true)
 		// if cnt > 20 {
 		// 	break
 		// }
