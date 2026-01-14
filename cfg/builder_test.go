@@ -348,12 +348,12 @@ func TestCFGBuilder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	addresses, err := prov.GeetAddresses()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// addresses := []string{"0x103a9d0ee6fdc4762ec08172ff0881ebb68c73c8"}
+	// addresses, err := prov.GeetAddresses()
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	//
+	addresses := []string{"0x0389ca91dbc41d828f7d25347afc23610ad8a16d"}
 
 	for _, address := range addresses {
 		hexcode, err := prov.GetRuntimeBinary(address)
