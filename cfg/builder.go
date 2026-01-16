@@ -71,7 +71,7 @@ func NewSumD() *SumD {
 
 // Insert adds a path to the SumD set, D is the end of the path
 func (sd *SumD) Insert(path *Path) bool {
-	basicBlock := path.last()
+	basicBlock := path.lastsecond()
 	s := sd.sumD
 	if _, ok := s[basicBlock]; !ok {
 		s[basicBlock] = make([]*Path, 0)
