@@ -1,7 +1,9 @@
 package cfg
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -10,6 +12,38 @@ type Liveness struct {
 	lives  map[int32][]*live
 	pruned map[int32]map[*Path]*live
 	picked map[*Path]bool
+}
+
+func (l *Liveness) Hash(index int32) Hash {
+	h := sha256.New()
+	h.Write([]byte(l.String(index)))
+	return Hash(h.Sum(nil))
+}
+
+func (l *Liveness) String(index int32) string {
+	slotMap := make(map[int][]string)
+	for _, live := range l.lives[index] {
+		for i, slot := range live.slots {
+			// fmt.Fprintf(&sb, "  %d: %s |", i, slot)
+			if _, ok := slotMap[i]; !ok {
+				slotMap[i] = make([]string, 0)
+			}
+			slotMap[i] = append(slotMap[i], slot)
+		}
+		// fmt.Fprintf(&sb, "\n")
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Liveness of block %d:\n", index)
+	keys := make([]int, 0, len(slotMap))
+	for k := range slotMap {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	for _, k := range keys {
+		sort.Strings(slotMap[k])
+		fmt.Fprintf(&sb, "  %d: %s\n", k, strings.Join(slotMap[k], "| "))
+	}
+	return sb.String()
 }
 
 func (l *Liveness) ContainsLive(b *BasicBlock) bool {

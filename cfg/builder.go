@@ -1,7 +1,9 @@
 package cfg
 
 import (
+	"encoding/hex"
 	"fmt"
+	"sort"
 	"sync"
 
 	"fadingrose/iris-ether-v3/vm"
@@ -10,6 +12,37 @@ import (
 type (
 	Hash [32]byte
 )
+
+func (h Hash) Empty() Hash {
+	res := h
+	for i := 0; i < 32; i++ {
+		res[i] = 0
+	}
+	return res
+}
+
+func (h Hash) Xor(others ...Hash) Hash {
+	res := h
+	for _, other := range others {
+		for i := 0; i < 32; i++ {
+			res[i] ^= other[i]
+		}
+	}
+	return res
+}
+
+func (h Hash) IsSame(other Hash) bool {
+	for i := 0; i < 32; i++ {
+		if h[i] != other[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (h Hash) String() string {
+	return hex.EncodeToString(h[:])
+}
 
 type CFGBuilder struct {
 	cfg *CFG
@@ -53,31 +86,39 @@ func (sm *StateMap) Insert(basicBlock *BasicBlock, stackHash string, dest uint64
 }
 
 type (
-	// SumD   map[*BasicBlock][]*Path
 	FixedD map[*BasicBlock][]*Path
 )
 
 type SumD struct {
 	sumD   map[*BasicBlock][]*Path
+	sumSt  map[*BasicBlock][]*Stack
 	picked map[*Path]bool
 }
 
 func NewSumD() *SumD {
 	return &SumD{
 		sumD:   make(map[*BasicBlock][]*Path),
+		sumSt:  make(map[*BasicBlock][]*Stack),
 		picked: make(map[*Path]bool),
 	}
 }
 
-// Insert adds a path to the SumD set, D is the end of the path
-func (sd *SumD) Insert(path *Path) bool {
-	basicBlock := path.lastsecond()
-	s := sd.sumD
-	if _, ok := s[basicBlock]; !ok {
-		s[basicBlock] = make([]*Path, 0)
+func (sd *SumD) DBlocks() []*BasicBlock {
+	var dblocks []*BasicBlock
+	for block := range sd.sumD {
+		dblocks = append(dblocks, block)
 	}
-	s[basicBlock] = append(s[basicBlock], path)
-	sd.sumD = s
+	sort.Slice(dblocks, func(i, j int) bool {
+		return dblocks[i].index < dblocks[j].index
+	})
+	return dblocks
+}
+
+// Insert adds a path to the SumD set, D is the end of the path
+func (sd *SumD) Insert(path *Path, st *Stack) bool {
+	basicBlock := path.lastsecond()
+	sd.sumD[basicBlock] = append(sd.sumD[basicBlock], path)
+	sd.sumSt[basicBlock] = append(sd.sumSt[basicBlock], st)
 	return true
 }
 
@@ -284,11 +325,6 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 		return nil, ErrLastIsNil
 	}
 
-	// if path.contains(1051) {
-	// 	fmt.Println(path.String())
-	// 	fmt.Println(st.String())
-	// }
-
 	_, _, flag := snaps[path.last()].Live(last.params[0])
 	// If flag is false, the jump destination does not depend on the input stack
 	if !flag {
@@ -353,7 +389,7 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 	path.last().AppendSuccessor(dest, ContextAware, path)
 	np := path.copy()
 	np.push(dest)
-	cb.SumD.Insert(np)
+	cb.SumD.Insert(np, st)
 
 	// do NOT return SumD
 	return nil, nil
@@ -504,6 +540,8 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 	}
 
 	var cnt int
+	window := []Hash{}
+	CHANSE := 3
 	var (
 		haltCnt int
 		dupCnt  int
@@ -514,30 +552,54 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		if len(pathList) == 0 {
 			// we try to pick up pathes from sumD first
 			pathList = cb.SumD.Pick()
-			// if len(pathList) == 0 {
-			// 	break
-			// }
 
-			// we will try to pick up pathes from pruned liveness
-			for _, path := range cb.Liveness.PrunedPaths() {
-				i := NewInterpreter(path, 1024)
-				_, st, _, err := i.Run()
-				if err != nil {
-					continue
-				}
-				if _, _, flag := cb.cfg.containsJump(st); flag {
-					succ, err := cb.execute(path)
-					if err != nil || len(succ) == 0 {
-						continue
-					}
-					np := path.fork(succ)
-					if len(np) > 0 {
-						// fmt.Println("append liveness path")
-						pathList = append(pathList, np...)
-						pickCnt += len(np)
-					}
-				}
+			var curHash Hash
+			curHash.Empty()
+			for _, dblock := range cb.SumD.DBlocks() {
+				h := cb.Liveness.Hash(dblock.index)
+				curHash = curHash.Xor(h)
 			}
+
+			allSame := true
+			if len(window) < CHANSE {
+				window = append(window, curHash)
+				allSame = false
+			} else {
+				for i := 0; i < len(window)-1; i++ {
+					if !window[i].IsSame(curHash) {
+						allSame = false
+					}
+				}
+				window = append(window[1:], curHash)
+			}
+
+			cover, total := cb.cfg.coverage()
+			dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
+			haltCnt, dupCnt, liveCnt, pickCnt = 0, 0, 0, 0
+
+			if allSame {
+				break
+			}
+			// we will try to pick up pathes from pruned liveness
+			// for _, path := range cb.Liveness.PrunedPaths() {
+			// 	i := NewInterpreter(path, 1024)
+			// 	_, st, _, err := i.Run()
+			// 	if err != nil {
+			// 		continue
+			// 	}
+			// 	if _, _, flag := cb.cfg.containsJump(st); flag {
+			// 		succ, err := cb.execute(path)
+			// 		if err != nil || len(succ) == 0 {
+			// 			continue
+			// 		}
+			// 		np := path.fork(succ)
+			// 		if len(np) > 0 {
+			// 			// fmt.Println("append liveness path")
+			// 			pathList = append(pathList, np...)
+			// 			pickCnt += len(np)
+			// 		}
+			// 	}
+			// }
 
 		}
 
@@ -552,10 +614,6 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		// 	fmt.Println(curPath.String())
 		// }
 		//
-		if cnt > 0 && cnt%200 == 0 {
-			cover, total := cb.cfg.coverage()
-			dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
-		}
 		// dprint(curPath.String(), false, false)
 		cleanFlag := true
 
@@ -571,17 +629,6 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 			liveCnt++
 			continue
 		}
-
-		// update liveness // NOTE: move in the execute() -> executeDPath()
-		// if curPath.last().isContextAware() {
-		// 	np := curPath.copy()
-		// 	if cb.DPathFound(np) {
-		// 		cb.SumD.Insert(np)
-		// 	} else {
-		// 		cb.FixedD.Insert(np)
-		// 	}
-		// 	continue
-		// }
 
 		// for a loop, we need to check the liveness
 		// P = {B1,B2,H1}
@@ -617,43 +664,6 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		// }
 
 	}
-	// Step 2: init D set and fixed D set
-	// DFS from the entry basic block
-	// NOTE: exprimental loop pruned path check
-	// fmt.Println("loop pruned path")
-	// for _, path := range cb.LoopPruned {
-	// 	i := NewInterpreter(path, 1024)
-	// 	_, st, _, err := i.Run()
-	// 	if err != nil {
-	// 		continue
-	// 	}
-	// 	if bb, reg, flag := cb.cfg.containsJump(st); flag {
-	// 		fmt.Println("loop contains jump")
-	// 		fmt.Println(reg.Expand())
-	// 		fmt.Println(bb.String())
-	// 		fmt.Println(path.String())
-	// 		fmt.Println(st.String())
-	// 		continue
-	// 	}
-	// }
-	// fmt.Println("liveness pruned path")
-	// for _, path := range cb.Liveness.PrunedPaths() {
-	// 	fmt.Println(path.String())
-	// 	i := NewInterpreter(path, 1024)
-	// 	_, st, _, err := i.Run()
-	// 	if err != nil {
-	// 		continue
-	// 	}
-	// 	fmt.Println(st.String())
-	// 	if bb, reg, flag := cb.cfg.containsJump(st); flag {
-	// 		fmt.Println("liveness contains jump")
-	// 		fmt.Println(reg.Expand())
-	// 		fmt.Println(bb.String())
-	// 		fmt.Println(path.String())
-	// 		fmt.Println(st.String())
-	// 		continue
-	// 	}
-	// }
 }
 
 func (cb *CFGBuilder) runWithAnyStack(startBB *BasicBlock) {
