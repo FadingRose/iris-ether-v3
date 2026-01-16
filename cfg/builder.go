@@ -2,11 +2,11 @@ package cfg
 
 import (
 	"encoding/hex"
+	"fadingrose/iris-ether-v3/vm"
 	"fmt"
 	"sort"
 	"sync"
-
-	"fadingrose/iris-ether-v3/vm"
+	"time"
 )
 
 type (
@@ -82,7 +82,7 @@ func (sm *StateMap) Insert(basicBlock *BasicBlock, stackHash string, dest uint64
 		// (*sm)[basicBlock][stackHash][dest] = append((*sm)[basicBlock][stackHash][dest], path)
 		duplicated = true
 	}
-	return
+	return duplicated
 }
 
 type (
@@ -514,17 +514,17 @@ func (cb *CFGBuilder) LiveCheck(path *Path) bool {
 	return false
 }
 
-func (cb *CFGBuilder) Build(path *Path, limit int, maxStackSize int) {
+func (cb *CFGBuilder) Build(path *Path, limit int, maxStackSize int, timeout time.Duration) {
 	cb.cfg.LiteralConnectSuccessors()
 	if path == nil {
 		path = NewPath(cb.cfg.BasicBlocks[0])
 	}
 	pathList := make([]*Path, 0)
 	pathList = append(pathList, path)
-	cb.build(pathList)
+	cb.build(pathList, timeout)
 }
 
-func (cb *CFGBuilder) build(pathList []*Path) {
+func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 	var dbstr string
 	dprint := func(content string, flush bool, clean bool) {
 		if clean {
@@ -546,9 +546,16 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		haltCnt int
 		dupCnt  int
 		liveCnt int
-		pickCnt int
+		// pickCnt int
 	)
+	start := time.Now()
 	for {
+
+		if time.Since(start) > timeout {
+			cb.cfg.haltReason = "timeout"
+			break
+		}
+
 		if len(pathList) == 0 {
 			// we try to pick up pathes from sumD first
 			pathList = cb.SumD.Pick()
@@ -573,9 +580,9 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 				window = append(window[1:], curHash)
 			}
 
-			cover, total := cb.cfg.coverage()
-			dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
-			haltCnt, dupCnt, liveCnt, pickCnt = 0, 0, 0, 0
+			// cover, total := cb.cfg.coverage()
+			// dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
+			// haltCnt, dupCnt, liveCnt, pickCnt = 0, 0, 0, 0
 
 			if allSame {
 				break
@@ -664,6 +671,8 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		// }
 
 	}
+
+	cb.cfg.haltReason = "fixed"
 }
 
 func (cb *CFGBuilder) runWithAnyStack(startBB *BasicBlock) {
