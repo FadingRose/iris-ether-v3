@@ -297,3 +297,12 @@ func (p *Path) LeadingLoop() (*BasicBlock, bool) {
 	}
 	return nil, false
 }
+
+func (p *Path) contains(index int32) bool {
+	for _, b := range p.data {
+		if b.index == index {
+			return true
+		}
+	}
+	return false
+}

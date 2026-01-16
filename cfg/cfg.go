@@ -619,6 +619,27 @@ func (cfg *CFG) CFGBuilder() *CFGBuilder {
 	return cfg.builder
 }
 
+// containsJump checks whether the stack contains unreachable jumpdest
+func (cfg *CFG) containsJump(st *Stack) (*BasicBlock, *Reg, bool) {
+	unreachable := make(map[uint64]*BasicBlock)
+	for _, bb := range cfg.BasicBlocks {
+		if len(bb.preds) != 0 || bb.stmts[0].op != vm.JUMPDEST {
+			continue
+		}
+		unreachable[bb.stmts[0].PC()] = bb
+	}
+	for _, reg := range st.items {
+		if reg.inst == nil || reg.value() == nil {
+			continue
+		}
+		valU64 := reg.value().Uint64()
+		if bb, ok := unreachable[valU64]; ok {
+			return bb, reg, true
+		}
+	}
+	return nil, nil, false
+}
+
 // func (cfg *CFG) ExportCFG(path string) error {
 // 	type block struct {
 // 		Index   int32    `json:"index"`

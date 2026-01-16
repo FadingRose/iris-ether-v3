@@ -240,7 +240,7 @@ func (s *Stack) String() string {
 	for i, reg := range s.items {
 		value := ""
 		if reg.value() != nil {
-			value = fmt.Sprintf("=%s", reg.value().String())
+			value = fmt.Sprintf("=%s", reg.value().Hex())
 		} else {
 			value = "=nil"
 		}

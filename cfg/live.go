@@ -15,6 +15,16 @@ func (l *Liveness) ContainsLive(b *BasicBlock) bool {
 	return len(l.lives[b.index]) > 0
 }
 
+func (l *Liveness) PrunedPaths() []*Path {
+	var paths []*Path
+	for _, live := range l.pruned {
+		for p := range live {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
 type live struct {
 	slots    map[int]string
 	indicate map[int32]uint64 // map[D_Block]dest

@@ -21,10 +21,10 @@ type CFGBuilder struct {
 	SumD
 	FixedD
 	Liveness    *Liveness
+	LoopPruned  []*Path
 	stateMutex  sync.RWMutex
 	forceStop   bool
 	leadingHalt map[*BasicBlock]bool
-	fixedD      map[*BasicBlock]bool
 }
 
 type StateMap map[*BasicBlock]map[string]map[uint64][]*Path // map[block]map[stack_hash]map[dest]
@@ -83,10 +83,10 @@ func NewCFGBuilder(cfg *CFG) *CFGBuilder {
 		SumD:        make(SumD),
 		FixedD:      make(FixedD),
 		Liveness:    NewLiveness(),
+		LoopPruned:  make([]*Path, 0),
 		stateMutex:  sync.RWMutex{},
 		forceStop:   false,
 		leadingHalt: make(map[*BasicBlock]bool),
-		fixedD:      make(map[*BasicBlock]bool),
 	}
 }
 
@@ -119,6 +119,12 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 	if last == nil {
 		return nil, ErrLastIsNil
 	}
+
+	if path.contains(101) {
+		fmt.Println(path.String())
+		fmt.Println(st.String())
+	}
+
 	switch last.inst.op {
 	case vm.STOP, vm.RETURN, vm.REVERT, vm.INVALID, vm.SELFDESTRUCT:
 		// terminated
@@ -248,6 +254,11 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 	}
 	if last == nil {
 		return nil, ErrLastIsNil
+	}
+
+	if path.contains(101) {
+		fmt.Println(path.String())
+		fmt.Println(st.String())
 	}
 
 	_, _, flag := snaps[path.last()].Live(last.params[0])
@@ -462,20 +473,64 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 	}
 
 	var cnt int
-	for len(pathList) > 0 {
+	for {
+		if len(pathList) == 0 {
+			// we will try to pick up pathes from pruned liveness
+			for _, path := range cb.Liveness.PrunedPaths() {
+				i := NewInterpreter(path, 1024)
+				_, st, _, err := i.Run()
+				if err != nil {
+					continue
+				}
+				if _, _, flag := cb.cfg.containsJump(st); flag {
+					succ, err := cb.execute(path)
+					if err != nil || len(succ) == 0 {
+						continue
+					}
+					np := path.fork(succ)
+					if len(np) > 0 {
+						// fmt.Println("append liveness path")
+						pathList = append(pathList, np...)
+					}
+				}
+			}
+			// for _, path := range cb.LoopPruned {
+			// 	header, _ := path.LeadingLoop()
+			// 	if cb.Liveness.ContainsLive(header) {
+			// 		succ, err := cb.execute(path)
+			// 		if err != nil || len(succ) == 0 {
+			// 			continue
+			// 		}
+			// 		np := path.fork(succ)
+			// 		if len(np) > 0 {
+			// 			// fmt.Println("append loop path")
+			// 			pathList = append(pathList, np...)
+			// 		}
+			// 	}
+			// }
+		}
+
+		if len(pathList) == 0 {
+			break
+		}
+
 		curPath := pathList[0]
 		pathList = pathList[1:]
+
+		// if curPath.contains(101) {
 		dprint(curPath.String(), false, false)
-		// fmt.Println(curPath.String())
+		// }
+		// cleanFlag := !curPath.contains(101)
+		cleanFlag := false
 
 		// halt check
 		if curPath.last().isLeadingHalt() {
-			dprint("[halt]", true, false)
+			dprint("[halt]", true, cleanFlag)
 			continue
 		}
 
 		if cb.LiveCheck(curPath) {
-			dprint("[liveness]", true, false)
+			dprint("[liveness]", true, cleanFlag)
 			continue
 		}
 
@@ -496,7 +551,8 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		header, isloop := curPath.LeadingLoop()
 		if isloop {
 			if !cb.Liveness.ContainsLive(header) {
-				dprint("[loop header not contains live]", true, false)
+				dprint("[loop header not contains live]", true, cleanFlag)
+				cb.LoopPruned = append(cb.LoopPruned, curPath)
 				// fmt.Println("loop header not contains live")
 				continue
 			}
@@ -505,7 +561,7 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		succ, err := cb.execute(curPath)
 		if err != nil {
 			// fmt.Println(err)
-			dprint(fmt.Sprintf("[execute error: %s]", err), true, false)
+			dprint(fmt.Sprintf("[execute error: %s]", err), true, cleanFlag)
 			continue
 		}
 		// fmt.Println(succ)
@@ -516,12 +572,49 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 
 		cnt++
 		dprint("", true, true)
-		// if cnt > 20 {
-		// 	break
+
+		// if len(pathList) != 0 {
+		// 	continue
 		// }
+
 	}
 	// Step 2: init D set and fixed D set
 	// DFS from the entry basic block
+	// NOTE: exprimental loop pruned path check
+	// fmt.Println("loop pruned path")
+	// for _, path := range cb.LoopPruned {
+	// 	i := NewInterpreter(path, 1024)
+	// 	_, st, _, err := i.Run()
+	// 	if err != nil {
+	// 		continue
+	// 	}
+	// 	if bb, reg, flag := cb.cfg.containsJump(st); flag {
+	// 		fmt.Println("loop contains jump")
+	// 		fmt.Println(reg.Expand())
+	// 		fmt.Println(bb.String())
+	// 		fmt.Println(path.String())
+	// 		fmt.Println(st.String())
+	// 		continue
+	// 	}
+	// }
+	// fmt.Println("liveness pruned path")
+	// for _, path := range cb.Liveness.PrunedPaths() {
+	// 	fmt.Println(path.String())
+	// 	i := NewInterpreter(path, 1024)
+	// 	_, st, _, err := i.Run()
+	// 	if err != nil {
+	// 		continue
+	// 	}
+	// 	fmt.Println(st.String())
+	// 	if bb, reg, flag := cb.cfg.containsJump(st); flag {
+	// 		fmt.Println("liveness contains jump")
+	// 		fmt.Println(reg.Expand())
+	// 		fmt.Println(bb.String())
+	// 		fmt.Println(path.String())
+	// 		fmt.Println(st.String())
+	// 		continue
+	// 	}
+	// }
 }
 
 func (cb *CFGBuilder) runWithAnyStack(startBB *BasicBlock) {
