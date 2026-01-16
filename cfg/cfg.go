@@ -5,9 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
-	"time"
 
 	// "fadingrose/iris-ether-v3/compiler"
 	"fadingrose/iris-ether-v3/vm"
@@ -247,54 +245,54 @@ func (cfg *CFG) verifyDestPush(ins *instruction) bool {
 	return false
 }
 
-func (cfg *CFG) Build(limit int, max_stack_size int, timeout int, visul bool) {
-	// Capture memory stats before the operation
-	var m1 runtime.MemStats
-	runtime.ReadMemStats(&m1)
-
-	// Record start time
-	start := time.Now()
-
-	builder := NewCFGBuilder(cfg)
-	cfg.builder = builder
-
-	// if visul {
-	// 	builder.StartVisuailize()
-	// 	time.Sleep(3 * time.Second) // wait for profiler to attach
-	// }
-	//
-	if timeout > 0 {
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			builder.Build(nil, limit, max_stack_size)
-		}()
-		select {
-		case <-done:
-			break
-		case <-time.After(time.Duration(timeout) * time.Second):
-			cfg.haltReason = "timeout"
-			break
-		}
-	} else {
-		builder.Build(nil, limit, max_stack_size)
-	}
-
-	// Record duration
-	duration := time.Since(start)
-
-	// Capture memory stats after the operation
-	var m2 runtime.MemStats
-	runtime.ReadMemStats(&m2)
-
-	// Calculate memory allocated
-	// m2.TotalAlloc - m1.TotalAlloc gives the cumulative bytes allocated.
-	// m2.Alloc - m1.Alloc gives the change in heap size.
-	alloc := m2.TotalAlloc - m1.TotalAlloc
-
-	cfg.TimeCost = duration.Milliseconds()
-	cfg.memCost = alloc
-}
+// func (cfg *CFG) Build(limit int, max_stack_size int, timeout int, visul bool) {
+// 	// Capture memory stats before the operation
+// 	var m1 runtime.MemStats
+// 	runtime.ReadMemStats(&m1)
+//
+// 	// Record start time
+// 	start := time.Now()
+//
+// 	builder := NewCFGBuilder(cfg)
+// 	cfg.builder = builder
+//
+// 	// if visul {
+// 	// 	builder.StartVisuailize()
+// 	// 	time.Sleep(3 * time.Second) // wait for profiler to attach
+// 	// }
+// 	//
+// 	if timeout > 0 {
+// 		done := make(chan struct{})
+// 		go func() {
+// 			defer close(done)
+// 			builder.Build(nil, limit, max_stack_size)
+// 		}()
+// 		select {
+// 		case <-done:
+// 			break
+// 		case <-time.After(time.Duration(timeout) * time.Second):
+// 			cfg.haltReason = "timeout"
+// 			break
+// 		}
+// 	} else {
+// 		builder.Build(nil, limit, max_stack_size)
+// 	}
+//
+// 	// Record duration
+// 	duration := time.Since(start)
+//
+// 	// Capture memory stats after the operation
+// 	var m2 runtime.MemStats
+// 	runtime.ReadMemStats(&m2)
+//
+// 	// Calculate memory allocated
+// 	// m2.TotalAlloc - m1.TotalAlloc gives the cumulative bytes allocated.
+// 	// m2.Alloc - m1.Alloc gives the change in heap size.
+// 	alloc := m2.TotalAlloc - m1.TotalAlloc
+//
+// 	cfg.TimeCost = duration.Milliseconds()
+// 	cfg.memCost = alloc
+// }
 
 //	func (cfg *CFG) StopBuild() {
 //		cfg.builder.stop()

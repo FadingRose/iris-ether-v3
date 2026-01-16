@@ -6,6 +6,7 @@ import (
 	"fadingrose/iris-ether-v3/provider"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -42,7 +43,8 @@ func Run(cmd *cobra.Command, target string, path string, timeout int) error {
 	}
 
 	c := cfg.NewCFG(bytecode)
-	c.Build(1, 1024, timeout, false)
+	c.CFGBuilder().Build(nil, 1, 1024,
+		time.Duration(timeout)*time.Second)
 
 	return nil
 }
