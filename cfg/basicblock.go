@@ -55,21 +55,26 @@ func (b *BasicBlock) LastSecondStmt() *instruction {
 	return b.stmts[n-2]
 }
 
-func (b *BasicBlock) AppendSuccessor(succ *BasicBlock, typ SuccType) bool {
+func (b *BasicBlock) AppendSuccessor(succ *BasicBlock, typ SuccType, path *Path) (string, bool) {
 	// b.visited++
 	// succ.visited++
-	return b.appendSuccessor(succ, typ, nil)
+	if edge, ok := b.appendSuccessor(succ, typ, nil); ok && path != nil {
+		return fmt.Sprintf("%s\nEdge: %s\n", path.String(), edge.String()), true
+	} else {
+		return "", false
+	}
+	// return b.appendSuccessor(succ, typ, nil)
 }
 
-func (b *BasicBlock) appendSuccessor(succ *BasicBlock, typ SuccType, path *Path) bool {
+func (b *BasicBlock) appendSuccessor(succ *BasicBlock, typ SuccType, path *Path) (*Edge, bool) {
 	if succ == nil {
 		if typ == Any {
 			b.succs = append(b.succs, &Edge{Src: b, Dst: succ, Typ: typ})
-			return false
+			return nil, false
 		}
 
 		// fmt.Printf("Warning: trying to add nil successor to Block %d with type %v\n", b.index, typ)
-		return false
+		return nil, false
 	}
 
 	for _, edge := range b.succs {
@@ -79,7 +84,7 @@ func (b *BasicBlock) appendSuccessor(succ *BasicBlock, typ SuccType, path *Path)
 		if edge.Dst.index == succ.index {
 			edge.VisitCount++
 			edge.LastPaths = append(edge.LastPaths, path)
-			return false
+			return nil, false
 		}
 	}
 
@@ -88,10 +93,11 @@ func (b *BasicBlock) appendSuccessor(succ *BasicBlock, typ SuccType, path *Path)
 	if path != nil {
 		pathStr = path.String()
 	}
-	b.succs = append(b.succs, &Edge{Src: b, Dst: succ, Typ: typ, VisitCount: 1, DiscoverPath: pathStr, LastPaths: make([]*Path, 0)})
+	edge := &Edge{Src: b, Dst: succ, Typ: typ, VisitCount: 1, DiscoverPath: pathStr, LastPaths: make([]*Path, 0)}
+	b.succs = append(b.succs, edge)
 	succ.preds = append(succ.preds, &Edge{Src: b, Dst: succ, Typ: typ, VisitCount: 1, DiscoverPath: pathStr, LastPaths: make([]*Path, 0)})
 
-	return true
+	return edge, true
 }
 
 func (b *BasicBlock) isContextAware() bool {

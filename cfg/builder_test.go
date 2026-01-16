@@ -238,7 +238,7 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 					panic(fmt.Sprintf("verifyDest failed: %s", address))
 				}
 
-				path.last().AppendSuccessor(dst, Jump)
+				path.last().AppendSuccessor(dst, Jump, nil)
 
 				return false
 			}

@@ -18,7 +18,7 @@ type CFGBuilder struct {
 
 	// stateMap   map[*BasicBlock]map[string]map[uint64][]*Path // map[block]map[stack_hash]map[dest]
 	StateMap
-	SumD
+	SumD *SumD
 	FixedD
 	Liveness    *Liveness
 	LoopPruned  []*Path
@@ -53,18 +53,46 @@ func (sm *StateMap) Insert(basicBlock *BasicBlock, stackHash string, dest uint64
 }
 
 type (
-	SumD   map[*BasicBlock][]*Path
+	// SumD   map[*BasicBlock][]*Path
 	FixedD map[*BasicBlock][]*Path
 )
+
+type SumD struct {
+	sumD   map[*BasicBlock][]*Path
+	picked map[*Path]bool
+}
+
+func NewSumD() *SumD {
+	return &SumD{
+		sumD:   make(map[*BasicBlock][]*Path),
+		picked: make(map[*Path]bool),
+	}
+}
 
 // Insert adds a path to the SumD set, D is the end of the path
 func (sd *SumD) Insert(path *Path) bool {
 	basicBlock := path.last()
-	if _, ok := (*sd)[basicBlock]; !ok {
-		(*sd)[basicBlock] = make([]*Path, 0)
+	s := sd.sumD
+	if _, ok := s[basicBlock]; !ok {
+		s[basicBlock] = make([]*Path, 0)
 	}
-	(*sd)[basicBlock] = append((*sd)[basicBlock], path)
+	s[basicBlock] = append(s[basicBlock], path)
+	sd.sumD = s
 	return true
+}
+
+func (sd *SumD) Pick() []*Path {
+	var paths []*Path
+	for _, path := range sd.sumD {
+		for _, p := range path {
+			if _, ok := sd.picked[p]; ok {
+				continue
+			}
+			sd.picked[p] = true
+			paths = append(paths, p)
+		}
+	}
+	return paths
 }
 
 func (fd *FixedD) Insert(path *Path) bool {
@@ -80,7 +108,7 @@ func NewCFGBuilder(cfg *CFG) *CFGBuilder {
 	return &CFGBuilder{
 		cfg:         cfg,
 		StateMap:    make(StateMap),
-		SumD:        make(SumD),
+		SumD:        NewSumD(),
 		FixedD:      make(FixedD),
 		Liveness:    NewLiveness(),
 		LoopPruned:  make([]*Path, 0),
@@ -142,7 +170,9 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 		if duplicated {
 			return nil, ErrDuplicated
 		}
-		path.last().AppendSuccessor(dest, Jump)
+		if res, ok := path.last().AppendSuccessor(dest, Jump, path); ok {
+			fmt.Println(res)
+		}
 		return []*BasicBlock{dest}, nil
 	case vm.JUMPI:
 
@@ -166,7 +196,9 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 				if duplicated {
 					return nil, fmt.Errorf("duplicated")
 				}
-				path.last().AppendSuccessor(dest, JumpITrue)
+				if res, ok := path.last().AppendSuccessor(dest, JumpITrue, path); ok {
+					fmt.Println(res)
+				}
 				return []*BasicBlock{dest}, nil
 			}
 
@@ -181,7 +213,9 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 			if duplicated {
 				return nil, ErrDuplicated
 			}
-			path.last().AppendSuccessor(path.last().next, JumpIFalse)
+			if res, ok := path.last().AppendSuccessor(path.last().next, JumpIFalse, path); ok {
+				fmt.Println(res)
+			}
 			return []*BasicBlock{path.last().next}, nil
 		}
 
@@ -201,7 +235,9 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 			} else {
 				duplicated := cb.StateMap.Insert(dest, st.Hash(), destU64, path)
 				if !duplicated {
-					path.last().AppendSuccessor(dest, JumpITrue)
+					if res, ok := path.last().AppendSuccessor(dest, JumpITrue, path); ok {
+						fmt.Println(res)
+					}
 					forks = append(forks, dest)
 				} else {
 					errs = append(errs, ErrDuplicated)
@@ -213,7 +249,9 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 		if path.last().next != nil {
 			duplicated := cb.StateMap.Insert(path.last().next, st.Hash(), path.last().next.Pc(), path)
 			if !duplicated {
-				path.last().AppendSuccessor(path.last().next, JumpIFalse)
+				if res, ok := path.last().AppendSuccessor(path.last().next, JumpIFalse, path); ok {
+					fmt.Println(res)
+				}
 				forks = append(forks, path.last().next)
 			} else {
 				errs = append(errs, ErrDuplicated)
@@ -287,7 +325,9 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 			return nil, ErrDuplicated
 		}
 
-		path.last().AppendSuccessor(dst, MustJump)
+		if res, ok := path.last().AppendSuccessor(dst, MustJump, path); ok {
+			fmt.Println(res)
+		}
 		cb.FixedD.Insert(path)
 
 		return []*BasicBlock{dst}, nil
@@ -322,10 +362,15 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 		// }
 	}
 
-	path.last().AppendSuccessor(dest, ContextAware)
-	cb.SumD.Insert(path)
+	if res, ok := path.last().AppendSuccessor(dest, ContextAware, path); ok {
+		fmt.Println(res)
+	}
+	np := path.copy()
+	np.push(dest)
+	cb.SumD.Insert(np)
 
-	return []*BasicBlock{dest}, nil
+	// do NOT return SumD
+	return nil, nil
 }
 
 // deprecated: use executeDPath()
@@ -481,6 +526,9 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 	)
 	for {
 		if len(pathList) == 0 {
+			// we try to pick up pathes from sumD first
+			pathList = cb.SumD.Pick()
+
 			// we will try to pick up pathes from pruned liveness
 			for _, path := range cb.Liveness.PrunedPaths() {
 				i := NewInterpreter(path, 1024)
@@ -528,8 +576,10 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		// 	fmt.Println(curPath.String())
 		// }
 		//
-		cover, total := cb.cfg.coverage()
-		dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
+		if cnt > 0 && cnt%200 == 0 {
+			cover, total := cb.cfg.coverage()
+			dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
+		}
 		// dprint(curPath.String(), false, false)
 		cleanFlag := true
 
