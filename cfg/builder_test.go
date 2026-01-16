@@ -352,10 +352,11 @@ func TestCFGBuilder(t *testing.T) {
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }
-	//
-	addresses := []string{"0x0389ca91dbc41d828f7d25347afc23610ad8a16d"}
+
+	addresses := []string{"0x0cb29e848a5899be2e4064b1660687d252d5192c"}
 
 	for _, address := range addresses {
+		fmt.Println(address)
 		hexcode, err := prov.GetRuntimeBinary(address)
 		if err != nil {
 			t.Fatal(err)
@@ -370,10 +371,9 @@ func TestCFGBuilder(t *testing.T) {
 		if c == nil {
 			continue
 		}
-		// p := NewPathFromString("0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 71 -> 73 -> 122", c.BasicBlocks)
 		c.CFGBuilder().Build(nil, 1, 1024)
 		cover, total := c.coverage()
 		fmt.Printf("%s: %d/%d\n", address, cover, total)
-		c.PrintReadableCFG()
+		// c.PrintReadableCFG()
 	}
 }

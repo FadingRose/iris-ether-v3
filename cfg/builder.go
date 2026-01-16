@@ -120,10 +120,10 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 		return nil, ErrLastIsNil
 	}
 
-	if path.contains(101) {
-		fmt.Println(path.String())
-		fmt.Println(st.String())
-	}
+	// if path.contains(1051) {
+	// 	fmt.Println(path.String())
+	// 	fmt.Println(st.String())
+	// }
 
 	switch last.inst.op {
 	case vm.STOP, vm.RETURN, vm.REVERT, vm.INVALID, vm.SELFDESTRUCT:
@@ -256,10 +256,10 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 		return nil, ErrLastIsNil
 	}
 
-	if path.contains(101) {
-		fmt.Println(path.String())
-		fmt.Println(st.String())
-	}
+	// if path.contains(1051) {
+	// 	fmt.Println(path.String())
+	// 	fmt.Println(st.String())
+	// }
 
 	_, _, flag := snaps[path.last()].Live(last.params[0])
 	// If flag is false, the jump destination does not depend on the input stack
@@ -473,6 +473,12 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 	}
 
 	var cnt int
+	var (
+		haltCnt int
+		dupCnt  int
+		liveCnt int
+		pickCnt int
+	)
 	for {
 		if len(pathList) == 0 {
 			// we will try to pick up pathes from pruned liveness
@@ -491,6 +497,7 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 					if len(np) > 0 {
 						// fmt.Println("append liveness path")
 						pathList = append(pathList, np...)
+						pickCnt += len(np)
 					}
 				}
 			}
@@ -517,20 +524,25 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		curPath := pathList[0]
 		pathList = pathList[1:]
 
-		// if curPath.contains(101) {
-		dprint(curPath.String(), false, false)
+		// if curPath.contains(1048) {
+		// 	fmt.Println(curPath.String())
 		// }
-		// cleanFlag := !curPath.contains(101)
-		cleanFlag := false
+		//
+		cover, total := cb.cfg.coverage()
+		dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
+		// dprint(curPath.String(), false, false)
+		cleanFlag := true
 
 		// halt check
 		if curPath.last().isLeadingHalt() {
 			dprint("[halt]", true, cleanFlag)
+			haltCnt++
 			continue
 		}
 
 		if cb.LiveCheck(curPath) {
 			dprint("[liveness]", true, cleanFlag)
+			liveCnt++
 			continue
 		}
 
@@ -562,6 +574,7 @@ func (cb *CFGBuilder) build(pathList []*Path) {
 		if err != nil {
 			// fmt.Println(err)
 			dprint(fmt.Sprintf("[execute error: %s]", err), true, cleanFlag)
+			dupCnt++
 			continue
 		}
 		// fmt.Println(succ)
