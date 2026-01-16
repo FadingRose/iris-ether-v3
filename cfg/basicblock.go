@@ -55,13 +55,14 @@ func (b *BasicBlock) LastSecondStmt() *instruction {
 	return b.stmts[n-2]
 }
 
-func (b *BasicBlock) AppendSuccessor(succ *BasicBlock, typ SuccType, path *Path) (string, bool) {
+func (b *BasicBlock) AppendSuccessor(succ *BasicBlock, typ SuccType, path *Path) bool {
 	// b.visited++
 	// succ.visited++
-	if edge, ok := b.appendSuccessor(succ, typ, nil); ok && path != nil {
-		return fmt.Sprintf("%s\nEdge: %s\n", path.String(), edge.String()), true
+	if _, ok := b.appendSuccessor(succ, typ, nil); ok && path != nil {
+		// fmt.Printf("%s\nEdge: %s\n", path.String(), edge.String())
+		return true
 	} else {
-		return "", false
+		return false
 	}
 	// return b.appendSuccessor(succ, typ, nil)
 }

@@ -354,6 +354,7 @@ func TestCFGBuilder(t *testing.T) {
 	// }
 
 	addresses := []string{"0x0cb29e848a5899be2e4064b1660687d252d5192c"}
+	// addresses := []string{"0x0389ca91dbc41d828f7d25347afc23610ad8a16d"}
 
 	for _, address := range addresses {
 		fmt.Println(address)

@@ -9,6 +9,7 @@ import (
 type Liveness struct {
 	lives  map[int32][]*live
 	pruned map[int32]map[*Path]*live
+	picked map[*Path]bool
 }
 
 func (l *Liveness) ContainsLive(b *BasicBlock) bool {
@@ -19,7 +20,11 @@ func (l *Liveness) PrunedPaths() []*Path {
 	var paths []*Path
 	for _, live := range l.pruned {
 		for p := range live {
+			if _, ok := l.picked[p]; ok {
+				continue
+			}
 			paths = append(paths, p)
+			l.picked[p] = true
 		}
 	}
 	return paths
@@ -65,6 +70,7 @@ func NewLiveness() *Liveness {
 	return &Liveness{
 		lives:  make(map[int32][]*live),
 		pruned: make(map[int32]map[*Path]*live),
+		picked: make(map[*Path]bool),
 	}
 }
 
