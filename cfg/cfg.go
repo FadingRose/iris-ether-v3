@@ -364,6 +364,10 @@ func (s Summary) ProfileString() string {
 	return builder.String()
 }
 
+func (cfg *CFG) Coverage() (int, int) {
+	return cfg.coverage()
+}
+
 func (cfg *CFG) coverage() (int, int) {
 	entry := cfg.BasicBlocks[0]
 	visited := make(map[int32]bool)
@@ -568,6 +572,10 @@ func (cfg *CFG) edges() int {
 //
 // 	return nil
 // }
+
+func (cfg *CFG) HaltReason() string {
+	return cfg.haltReason
+}
 
 func (cfg *CFG) GenerateReadableCFG(path string) error {
 	var sb strings.Builder

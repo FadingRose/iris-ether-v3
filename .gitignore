@@ -2,3 +2,4 @@ instrument_migrate.db
 build/bin
 database.db
 runtime_binary.db
+v3_baseline.db

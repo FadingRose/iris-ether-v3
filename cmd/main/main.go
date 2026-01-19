@@ -21,10 +21,21 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+var baselineCmd = &cobra.Command{
+	Use:   "baseline",
+	Short: "v3 add liveness mechanism",
+	Args:  cobra.ExactArgs(0),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmds.RunBaseline()
+	},
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&provider, "provider", "p", "", "input from database path")
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "output database path")
 	rootCmd.PersistentFlags().IntVarP(&timeout, "timeout", "t", 30, "timeout in seconds")
+
+	rootCmd.AddCommand(baselineCmd)
 }
 
 func main() {

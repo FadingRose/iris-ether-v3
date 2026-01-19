@@ -2,11 +2,12 @@ package cfg
 
 import (
 	"encoding/hex"
-	"fadingrose/iris-ether-v3/vm"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
+
+	"fadingrose/iris-ether-v3/vm"
 )
 
 type (
@@ -335,6 +336,9 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 		slast, _, _, err := i.Run()
 		if err != nil {
 			return nil, fmt.Errorf("any test failed: %w", err)
+		}
+		if last.params[0].value() == nil || slast.params[0].value() == nil {
+			return nil, fmt.Errorf("any test failed, contains nil param")
 		}
 		if last.params[0].value().Uint64() != slast.params[0].value().Uint64() {
 			return nil, fmt.Errorf("any test failed: dest mismatch")

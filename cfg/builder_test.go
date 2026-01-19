@@ -438,6 +438,32 @@ func TestStagnation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	resDbPath := "v3_baseline.db"
+	resDb, err := sql.Open("sqlite3", resDbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resDb.Close()
+
+	_, err = resDb.Exec(`
+		CREATE TABLE IF NOT EXISTS v3_baseline (
+			address TEXT PRIMARY KEY,
+			old_covered INTEGER,
+			new_covered INTEGER,
+			total_blocks INTEGER,
+			old_ratio REAL,
+			new_ratio REAL,
+			old_time_ms REAL,
+			new_time_ms REAL,
+			old_halt_reason TEXT,
+			new_halt_reason TEXT,
+			captured_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var (
 		better  int
 		worse   int
@@ -487,6 +513,21 @@ func TestStagnation(t *testing.T) {
 
 		fmt.Printf("%s | %4d / %-4d | %5.1f%% / %5.1f%% (%+6.1f%%) | %12.8f%% | %-15s | %s\n",
 			tc.address, tc.coveredBlocks, cover, oldRatio*100, newRatio*100, (newRatio-oldRatio)*100, timeRatio, tc.haltReason, c.haltReason)
+
+		// Record results to v3_baseline.db
+		_, err = resDb.Exec(`
+			INSERT OR REPLACE INTO v3_baseline (
+				address, old_covered, new_covered, total_blocks, 
+				old_ratio, new_ratio, old_time_ms, new_time_ms, 
+				old_halt_reason, new_halt_reason
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			tc.address, tc.coveredBlocks, cover, total,
+			oldRatio, newRatio, float64(tc.timecost), newCostMs,
+			tc.haltReason, c.haltReason,
+		)
+		if err != nil {
+			t.Errorf("failed to save baseline for %s: %v", tc.address, err)
+		}
 
 		// Statistics updates
 		if cover > tc.coveredBlocks {
