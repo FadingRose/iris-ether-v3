@@ -11,11 +11,13 @@ import (
 type BasicBlock struct {
 	succs []*Edge
 	preds []*Edge
+	// next is the linear fallthrough block in bytecode order, for the JUMPI, the false branch is the next block, and for the BasicBlock who ends with not JUMP/JUMPI, the next is the next block, it's valid edge.
 	next  *BasicBlock
 	index int32
 	cfg   *CFG
 	stmts instructions
 
+	// offset is the base PC of the INVALID-delimited partition this block belongs to.
 	offset uint64
 
 	visited int

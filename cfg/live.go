@@ -114,6 +114,7 @@ func (l *Liveness) Check(st *Stack, path *Path, index int32) bool {
 	for _, live := range l.lives[index] {
 		m := true
 		for pos, inst := range live.slots {
+			// pos is height from top-of-stack (0 = top), matching Snapshot.Live.
 			reg := st.GetAtPosition(pos)
 			if reg == nil || reg.inst == nil {
 				m = false
@@ -121,8 +122,11 @@ func (l *Liveness) Check(st *Stack, path *Path, index int32) bool {
 			}
 			if reg.inst.String() != inst {
 				m = false
+				// fmt.Println(reg.inst.String(), inst)
 				break
 			}
+
+			// fmt.Println(reg.inst.String(), inst)
 		}
 		match = match || m
 		if match {

@@ -15,7 +15,9 @@ type CFG struct {
 	BasicBlocks []*BasicBlock `json:"blocks"`
 	// ProbePairs  []compiler.ProbePair `json:"probe_pairs"`
 
-	validDestMap map[uint64]map[uint64]*BasicBlock // validDestMap[offset]map[pc]*BasicBlock
+	// validDestMap maps partition offset -> (pc relative to offset) -> block.
+	// offset == 0 is also populated with absolute PCs for convenience.
+	validDestMap map[uint64]map[uint64]*BasicBlock
 	builder      *CFGBuilder
 
 	TimeCost int64 // in ms
@@ -49,7 +51,7 @@ func NewCFG(bytecode []byte) *CFG {
 		bytecode: bytecode,
 	}
 
-	// if start with '0x', trim it
+	// If bytecode is hex-encoded with 0x prefix, decode it first.
 	if len(bytecode) >= 2 && bytecode[0] == '0' && (bytecode[1] == 'x' || bytecode[1] == 'X') {
 		bytecode, _ = hex.DecodeString(string(bytecode[2:]))
 	}
@@ -57,6 +59,7 @@ func NewCFG(bytecode []byte) *CFG {
 	nxtit := vm.NewInstructionIterator(bytecode)
 	nxtit.Next()
 
+	// offset tracks the base of each INVALID-delimited partition (entry at PC=0 per partition).
 	offset := uint64(0)
 	cur := NewBasicBlock(int32(0), cfg, offset)
 

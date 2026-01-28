@@ -32,6 +32,7 @@ func (i *Interpreter) Run() (*Reg, *Stack, map[*BasicBlock]*Snapshot, error) {
 	var err error
 	snapshots := make(map[*BasicBlock]*Snapshot)
 	for _, bb := range i.path.data {
+		// Snapshot before executing the block for liveness analysis.
 		snapshots[bb] = i.st.Snapshot()
 
 		for _, reg := range bb.regs() {
@@ -46,7 +47,7 @@ func (i *Interpreter) Run() (*Reg, *Stack, map[*BasicBlock]*Snapshot, error) {
 				continue
 			}
 			if reg.inst.op.IsDup() {
-				// err = i.st.DupN(reg.inst.op.DupNum())
+				// Record dup source so dependency/liveness can trace through duplicates.
 				dupFrom, _ := i.st.GetDupN(reg.inst.op.DupNum())
 				reg.dupFrom = dupFrom
 				i.st.Push(reg)
@@ -61,6 +62,7 @@ func (i *Interpreter) Run() (*Reg, *Stack, map[*BasicBlock]*Snapshot, error) {
 			reg.val = reg.value()
 
 			if reg.inst.op == vm.JUMP || reg.inst.op == vm.JUMPI {
+				// JUMP/JUMPI consume params but do not push results.
 				continue
 			}
 			i.st.PushN(reg, reg.inst.pushbackSize)

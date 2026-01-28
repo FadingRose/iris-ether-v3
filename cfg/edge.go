@@ -21,6 +21,7 @@ const (
 	Arbitrary // indicates inner block, our work do NOT use this, for adapt to other tool-chain convert to *CFG
 )
 
+// Edge connects two basic blocks with metadata used for exploration/debugging.
 type Edge struct {
 	Src          *BasicBlock
 	Dst          *BasicBlock

@@ -52,8 +52,11 @@ type CFGBuilder struct {
 
 	// stateMap   map[*BasicBlock]map[string]map[uint64][]*Path // map[block]map[stack_hash]map[dest]
 	StateMap
+	// SumD collects context-aware paths (ending at D-blocks) for later refinement.
 	SumD *SumD
+	// FixedD records D-paths proven to be must-jump (dest independent from input stack).
 	FixedD
+	// Liveness tracks which input stack slots influence D-block destinations.
 	Liveness    *Liveness
 	LoopPruned  []*Path
 	stateMutex  sync.RWMutex
@@ -181,6 +184,7 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 		return cb.executeDPath(path)
 	}
 
+	// Non-context-aware: execute along the full path and resolve the last op.
 	i := NewInterpreter(path, 1024)
 	last, st, _, err := i.Run()
 	if err != nil {
@@ -200,6 +204,7 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 		// terminated
 		return nil, nil
 	case vm.JUMP:
+		// Jump target is the top stack item.
 		if last.params[0].value() == nil {
 			return nil, fmt.Errorf("%w: dest is nil", ErrJumpDestUnsolved)
 		}
@@ -256,6 +261,7 @@ func (cb *CFGBuilder) execute(path *Path) ([]*BasicBlock, error) {
 		}
 
 		// last.params[0].value() == nil
+		// Unknown condition: try to explore both branches if possible.
 		forks := make([]*BasicBlock, 0)
 		errs := make([]error, 0)
 
@@ -326,6 +332,7 @@ func (cb *CFGBuilder) executeDPath(path *Path) ([]*BasicBlock, error) {
 		return nil, ErrLastIsNil
 	}
 
+	// Check whether the jump destination depends on the input stack.
 	_, _, flag := snaps[path.last()].Live(last.params[0])
 	// If flag is false, the jump destination does not depend on the input stack
 	if !flag {
@@ -545,7 +552,7 @@ func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 
 	var cnt int
 	window := []Hash{}
-	CHANSE := 3
+	CHANSE := 2
 	var (
 		haltCnt int
 		dupCnt  int
@@ -561,7 +568,7 @@ func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 		}
 
 		if len(pathList) == 0 {
-			// we try to pick up pathes from sumD first
+			// If no immediate work, revisit D-paths and check for fixpoint.
 			pathList = cb.SumD.Pick()
 
 			var curHash Hash
@@ -592,26 +599,46 @@ func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 				break
 			}
 			// we will try to pick up pathes from pruned liveness
-			// for _, path := range cb.Liveness.PrunedPaths() {
-			// 	i := NewInterpreter(path, 1024)
-			// 	_, st, _, err := i.Run()
-			// 	if err != nil {
-			// 		continue
-			// 	}
-			// 	if _, _, flag := cb.cfg.containsJump(st); flag {
-			// 		succ, err := cb.execute(path)
-			// 		if err != nil || len(succ) == 0 {
-			// 			continue
-			// 		}
-			// 		np := path.fork(succ)
-			// 		if len(np) > 0 {
-			// 			// fmt.Println("append liveness path")
-			// 			pathList = append(pathList, np...)
-			// 			pickCnt += len(np)
-			// 		}
-			// 	}
-			// }
+			for _, path := range cb.Liveness.PrunedPaths() {
+				i := NewInterpreter(path, 1024)
+				_, st, _, err := i.Run()
+				if err != nil {
+					continue
+				}
+				if _, _, flag := cb.cfg.containsJump(st); flag {
+					succ, err := cb.execute(path)
+					if err != nil || len(succ) == 0 {
+						continue
+					}
+					np := path.fork(succ)
+					if len(np) > 0 {
+						// fmt.Println("append liveness path")
+						pathList = append(pathList, np...)
+						// pickCnt += len(np)
+					}
+				}
+			}
 
+			for _, path := range cb.LoopPruned {
+				i := NewInterpreter(path, 1024)
+				_, st, _, err := i.Run()
+				if err != nil {
+					continue
+				}
+				if _, _, flag := cb.cfg.containsJump(st); flag {
+					succ, err := cb.execute(path)
+					if err != nil || len(succ) == 0 {
+						continue
+					}
+					np := path.fork(succ)
+					if len(np) > 0 {
+						// fmt.Println("append liveness path")
+						pathList = append(pathList, np...)
+						// pickCnt += len(np)
+					}
+				}
+			}
+			//
 		}
 
 		if len(pathList) == 0 {

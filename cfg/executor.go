@@ -13,6 +13,7 @@ func Executor(op vm.OpCode) executor {
 }
 
 func execute(op vm.OpCode) executor {
+	// Only a small subset of opcodes are concretely evaluated; others yield unknown (nil).
 	if op.IsPush() {
 		return func(me *Reg) *uint256.Int {
 			return me.inst.Value()
