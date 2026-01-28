@@ -59,6 +59,7 @@ type CFGBuilder struct {
 	// Liveness tracks which input stack slots influence D-block destinations.
 	Liveness    *Liveness
 	LoopPruned  []*Path
+	LoopPicked  map[*Path]bool
 	stateMutex  sync.RWMutex
 	forceStop   bool
 	leadingHalt map[*BasicBlock]bool
@@ -157,6 +158,7 @@ func NewCFGBuilder(cfg *CFG) *CFGBuilder {
 		FixedD:      make(FixedD),
 		Liveness:    NewLiveness(),
 		LoopPruned:  make([]*Path, 0),
+		LoopPicked:  make(map[*Path]bool),
 		stateMutex:  sync.RWMutex{},
 		forceStop:   false,
 		leadingHalt: make(map[*BasicBlock]bool),
@@ -552,7 +554,7 @@ func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 
 	var cnt int
 	window := []Hash{}
-	CHANSE := 2
+	CHANSE := 16
 	var (
 		haltCnt int
 		dupCnt  int
@@ -570,6 +572,7 @@ func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 		if len(pathList) == 0 {
 			// If no immediate work, revisit D-paths and check for fixpoint.
 			pathList = cb.SumD.Pick()
+			// sumdCnt := len(pathList)
 
 			var curHash Hash
 			curHash.Empty()
@@ -591,15 +594,24 @@ func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 				window = append(window[1:], curHash)
 			}
 
-			// cover, total := cb.cfg.coverage()
 			// dprint(fmt.Sprintf("[%d] %d, halt: %d, dup: %d, live: %d, pick: %d, cover: %d/%d", len(pathList), cnt, haltCnt, dupCnt, liveCnt, pickCnt, cover, total), true, false)
 			// haltCnt, dupCnt, liveCnt, pickCnt = 0, 0, 0, 0
 
 			if allSame {
 				break
 			}
+
+			pickCnt := 0
+			candidaets := cb.Liveness.PrunedPaths()
+			for _, path := range cb.LoopPruned {
+				if _, ok := cb.LoopPicked[path]; ok {
+					continue
+				}
+				cb.LoopPicked[path] = true
+				candidaets = append(candidaets, path)
+			}
 			// we will try to pick up pathes from pruned liveness
-			for _, path := range cb.Liveness.PrunedPaths() {
+			for _, path := range candidaets {
 				i := NewInterpreter(path, 1024)
 				_, st, _, err := i.Run()
 				if err != nil {
@@ -614,31 +626,15 @@ func (cb *CFGBuilder) build(pathList []*Path, timeout time.Duration) {
 					if len(np) > 0 {
 						// fmt.Println("append liveness path")
 						pathList = append(pathList, np...)
-						// pickCnt += len(np)
+						pickCnt += 1
 					}
 				}
 			}
 
-			for _, path := range cb.LoopPruned {
-				i := NewInterpreter(path, 1024)
-				_, st, _, err := i.Run()
-				if err != nil {
-					continue
-				}
-				if _, _, flag := cb.cfg.containsJump(st); flag {
-					succ, err := cb.execute(path)
-					if err != nil || len(succ) == 0 {
-						continue
-					}
-					np := path.fork(succ)
-					if len(np) > 0 {
-						// fmt.Println("append liveness path")
-						pathList = append(pathList, np...)
-						// pickCnt += len(np)
-					}
-				}
-			}
-			//
+			// dropped := len(candidaets) - pickCnt
+			// cover, total := cb.cfg.coverage()
+			// fmt.Printf("sumD %d paths, candidates %d paths, dropped %d paths, drop percentage: %.2f%%, coverage: %d/%d %.2f%%\n", sumdCnt, len(candidaets), dropped, float64(dropped)/float64(len(candidaets))*100, cover, total, float64(cover)/float64(total)*100)
+
 		}
 
 		if len(pathList) == 0 {

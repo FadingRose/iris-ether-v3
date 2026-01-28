@@ -147,7 +147,25 @@ Termination is guaranteed because:
 
 ---
 
-## 11) Evaluation Summary (Paper Draft)
+## 11) Current Implementation Notes (cfg/*)
+
+This is a summary of what the code currently does (not the full paper design):
+
+- **CFG construction** (`cfg/cfg.go`): splits bytecode into basic blocks, tracks `validDestMap` per INVALID-delimited partition, and connects linear fallthrough via `next`.
+- **Interpreter** (`cfg/interpreter.go`): executes a *path* (sequence of blocks), building `Reg` nodes, taking a snapshot before each block, and evaluating only a small set of opcodes concretely (`PUSH`, `DUP`, `ADD`, `SUB`, `SHL/SHR`, `AND`, `SLOAD`). Unknown ops yield `nil` values.
+- **StateMap (Jump Vector)**: deduplicates exploration by `(block, stack hash, dest)` where the stack hash is **value-only** (no provenance). This is intentional and keeps the abstraction coarse.
+- **D-path handling** (`executeDPath`):
+  - If the jump dest does **not** depend on input stack (liveness flag false), run the **any-stack test** to confirm the dest is constant, then mark as `MustJump` and add to `FixedD`.
+  - If it **does** depend on input stack, record **liveness slots** backward along the path and add to `SumD`.
+- **Liveness** (`cfg/live.go`): each block can hold multiple `live` masks (different input slots lead to different D-blocks). Matching is position-based (top-of-stack height) using instruction identity strings from snapshots.
+- **Worklist driver** (`build`):
+  - Always prunes **leading halt**, **liveness-matched paths**, and some loop paths (if header has no live mask).
+  - When the immediate path list is empty, it **only picks from `SumD`** currently.
+  - `Liveness.PrunedPaths()` and `LoopPruned` are stored but replay is not yet wired (commented out).
+
+---
+
+## 12) Evaluation Summary (Paper Draft)
 
 Evaluation focuses on:
 - **Block coverage**: fraction of minimal basic blocks recovered.
@@ -156,7 +174,7 @@ Evaluation focuses on:
 
 ---
 
-## 12) Key Takeaways
+## 13) Key Takeaways
 
 - CFG recovery must be **context aware**, but full context is intractable.
 - Track **only stack elements that influence dynamic jumps**, per D-Block.
@@ -165,10 +183,93 @@ Evaluation focuses on:
 
 ---
 
-## 13) Terms / Glossary
+## 14) Open Problems / Next Steps (Implementation)
+
+The paper-mask mechanism is **not fully implemented** yet. Today, liveness is the practical stand-in, and the core challenge is **how to replay pruned paths** without exploding search.
+
+Desired replay sources (future work):
+
+1) **SumD** (context-aware paths).
+2) **Liveness-pruned paths** (masked equivalence).
+3) **Loop-pruned paths** (paths cut due to loop handling).
+
+Loop handling remains the hardest part: we want to avoid **magic numbers** (e.g., fixed loop depth). The current fixpoint window is itself a magic number. The target is a principled replay strategy that removes this tuning and still converges.
+
+Notes from `TestStagnation` (comments in `cfg/builder_test.go`):
+- Without picking from pruned liveness, coverage drops sharply even though runtime is very fast.
+- Picking from pruned liveness improves coverage substantially; **larger window size increases coverage** (at some time cost), while still far faster than the baseline.
+
+---
+
+## 15) Formal View: Liveness, Masks, and Loops (Design Lens)
+
+This section provides a formal lens for current liveness behavior and a direction for a principled replay strategy.
+
+### 15.1 Definitions
+
+Let CFG = (B, E), entry block `b0`.
+
+- A **path** `p = <b0, b1, …, bk>` is a sequence of blocks.
+- The interpreter defines a **stack transformer**:
+  - `Exec(p, S_in) -> (S_out, lastReg)`
+  - `lastReg` is the final executed reg; for JUMP/JUMPI it is the jump-dest reg (`params[0]`).
+- For a D-block `D`, define `Dest_D(S_in)` as the resolved jump destination under input stack `S_in`.
+
+### 15.2 Liveness as a Dependency Mask
+
+`Snapshot.Live(lastReg)` computes a **dependency set** of stack slots (top-based height) that influence `lastReg`.
+
+We can view each liveness instance as a **mask** `M` over stack slots:
+- `π_M(S)` is the projection of stack `S` to the slots in `M`.
+- In current code, `live.slots` stores `(pos -> instruction string)` which is a *signature* for `π_M(S)`.
+
+**Sound pruning criterion (for a given D-block):**
+If two input stacks agree on `π_M(S)` then they are equivalent for resolving `Dest_D`.
+
+### 15.3 Pruning as Abstract-State Fixpoint
+
+Define an **abstract state** at block `b`:
+```
+A = (b, π_M(S_in))
+```
+
+Exploration is a monotone process over abstract states. A fixpoint is reached when no new abstract state appears. This removes the need for a window-size heuristic once replay is driven by abstraction changes.
+
+### 15.4 Replay via Mask Refinement
+
+When a new liveness mask `M'` refines a previous mask `M` (i.e., adds new slots), previously pruned paths may become distinguishable.
+
+**Replay rule:**
+Replay any pruned path whose stored signature `π_M(S_in)` matched before but whose refined signature `π_M'(S_in)` is now new.
+
+This produces a **deterministic, finite** replay sequence because masks only grow.
+
+### 15.5 Loop Handling Without Magic Depth
+
+Treat a loop header (or SCC entry) `H` as a join point with a set of abstract inputs:
+```
+AbstractIn(H) = { π_M(S_in) }
+```
+
+When a path re-enters `H`:
+- If its `π_M(S_in)` is already in `AbstractIn(H)`, prune (loop does not add a new abstract state).
+- Otherwise, record and continue.
+
+As masks refine, loop entries can be revisited only when their abstract signatures change. This eliminates the need for a fixed loop-depth limit.
+
+### 15.6 Replay Sources as One Mechanism
+
+The three replay sources (SumD, liveness-pruned, loop-pruned) can be unified:
+- Store pruned paths with their abstract signatures.
+- Re-enqueue only when the relevant signature becomes distinguishable under refined masks.
+
+This aligns the implementation with the core idea: **enumerate only meaningful future paths** while avoiding magic numbers.
+
+---
+
+## 16) Terms / Glossary
 
 - **D-Block**: a block whose successors depend on the input stack (dynamic jump targets).
 - **Mask (M)**: a subset of stack indices relevant to a particular D-Block’s target resolution.
 - **Masked equivalence**: two states are equivalent if masked indices match.
 - **Recovery**: replay of pruned paths when later D-Blocks require additional dependencies.
-

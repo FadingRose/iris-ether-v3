@@ -3,10 +3,11 @@ package cfg
 import (
 	"database/sql"
 	"encoding/hex"
-	"fadingrose/iris-ether-v3/provider"
 	"fmt"
 	"testing"
 	"time"
+
+	"fadingrose/iris-ether-v3/provider"
 )
 
 // Sum_D and Fix_D test
@@ -343,29 +344,19 @@ func TestDTypeBlockWithLiveness(t *testing.T) {
 }
 
 func TestCFGBuilder(t *testing.T) {
-	path := "../../instrument_migrate.db"
+	path := "../runtime_binary.db"
 	prov, err := provider.NewLocalBenchmarkDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// addresses, err := prov.GeetAddresses()
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-
-	addresses := []string{"0x0cb29e848a5899be2e4064b1660687d252d5192c"}
+	addresses := []string{"0x31608722ac5ed1c2b1ae0af12602bec21f7fe0df"}
 	// addresses := []string{"0x0389ca91dbc41d828f7d25347afc23610ad8a16d"}
 
 	for _, address := range addresses {
 		fmt.Println(address)
-		hexcode, err := prov.GetRuntimeBinary(address)
+		bytecode, err := prov.GetRuntimeBinary(address)
 		if err != nil {
-			t.Fatal(err)
-		}
-		bytecode, err := hex.DecodeString(string(hexcode))
-		if err != nil {
-			// t.Fatal(err)
 			fmt.Println(err)
 			continue
 		}
@@ -465,19 +456,28 @@ func TestStagnation(t *testing.T) {
 	}
 
 	var (
-		better  int
-		worse   int
-		equal   int
-		faster  int
-		slower  int
-		timeOld int64
-		timeNew float64
+		better      int
+		worse       int
+		equal       int
+		faster      int
+		slower      int
+		timeOld     int64
+		timeNew     float64
+		totalOldCov int
+		totalNewCov int
+		totalBlocks int
 	)
 
 	fmt.Printf("\n%-42s | %-13s | %-17s | %-15s | %-15s | %s\n", "Address", "Cov(Old/New)", "Ratio(Old/New/Diff)", "Time(Ratio)", "Halt(Old)", "Halt(New)")
 	fmt.Println("-----------------------------------------------------------------------------------------------------------------------------------------")
 
+	tcs = tcs[:500]
+	// 0x493f28e684e76fd73cf241995cf20b7e311ed621
+
 	for _, tc := range tcs {
+		// if tc.address != "0x493f28e684e76fd73cf241995cf20b7e311ed621" {
+		// 	continue
+		// }
 		bytecode, err := prov.GetRuntimeBinary(tc.address)
 		if err != nil {
 			t.Fatal(err)
@@ -529,6 +529,9 @@ func TestStagnation(t *testing.T) {
 			t.Errorf("failed to save baseline for %s: %v", tc.address, err)
 		}
 
+		totalOldCov += tc.coveredBlocks
+		totalNewCov += cover
+		totalBlocks += total
 		// Statistics updates
 		if cover > tc.coveredBlocks {
 			better++
@@ -561,6 +564,51 @@ func TestStagnation(t *testing.T) {
 	fmt.Println("-----------------------------------------------------------------------------------------------------------------------------------------")
 	fmt.Printf("Summary (Total %d):\n", len(tcs))
 	fmt.Printf("Coverage: Better %d, Worse %d, Equal %d\n", better, worse, equal)
+	fmt.Printf("Total Cov: %d (Old) vs %d (New) | Total Blocks: %d\n", totalOldCov, totalNewCov, totalBlocks)
+	fmt.Printf("Avg Ratio: %.2f%% (Old) vs %.2f%% (New)\n", float64(totalOldCov)/float64(totalBlocks)*100, float64(totalNewCov)/float64(totalBlocks)*100)
 	fmt.Printf("Time    : Faster %d, Slower %d\n", faster, slower)
 	fmt.Printf("Total Time: %d ms (Old) vs %.3f ms (New)\n", timeOld, timeNew)
 }
+
+// Coverage: Better 20, Worse 20, Equal 10
+// Total Cov: 25107 (Old) vs 24225 (New) | Total Blocks: 26333
+// Avg Ratio: 95.34% (Old) vs 91.99% (New)
+// Time    : Faster 50, Slower 0
+// Total Time: 466467 ms (Old) vs 4110.399 ms (New)
+// --- FAIL: TestStagnation (4.24s)
+
+// Summary (Total 50): with fix, pick up from pruned liveness and loop pruned, windows is 5
+// Coverage: Better 24, Worse 16, Equal 10
+// Total Cov: 25107 (Old) vs 24678 (New) | Total Blocks: 26333
+// Avg Ratio: 95.34% (Old) vs 93.72% (New)
+// Time    : Faster 50, Slower 0
+// Total Time: 466467 ms (Old) vs 12623.683 ms (New)
+
+// Summary (Total 50):with fix, pick up from pruned liveness and loop pruned, windows is 4
+// Coverage: Better 23, Worse 17, Equal 10
+// Total Cov: 25107 (Old) vs 24490 (New) | Total Blocks: 26333
+// Avg Ratio: 95.34% (Old) vs 93.00% (New)
+// Time    : Faster 50, Slower 0
+// Total Time: 466467 ms (Old) vs 6127.067 ms (New)
+
+// Summary (Total 50): with fix, pick up from pruned liveness and loop pruned, windows is 3
+// Coverage: Better 21, Worse 19, Equal 10
+// Total Cov: 25107 (Old) vs 24373 (New) | Total Blocks: 26333
+// Avg Ratio: 95.34% (Old) vs 92.56% (New)
+// Time    : Faster 50, Slower 0
+// Total Time: 466467 ms (Old) vs 4795.513 ms (New)
+
+// Summary (Total 50): with fix, pick up from pruned liveness, windows is 3
+// Coverage: Better 22, Worse 18, Equal 10
+// Total Cov: 25107 (Old) vs 24274 (New) | Total Blocks: 26333
+// Avg Ratio: 95.34% (Old) vs 92.18% (New)
+// Time    : Faster 50, Slower 0
+// Total Time: 466467 ms (Old) vs 3792.279 ms (New)
+//
+//
+// Summary (Total 50): does not pick up from pruned liveness, windows is 3
+// Coverage: Better 4, Worse 39, Equal 7
+// Total Cov: 25107 (Old) vs 16689 (New) | Total Blocks: 26333
+// Avg Ratio: 95.34% (Old) vs 63.38% (New)
+// Time    : Faster 50, Slower 0
+// Total Time: 466467 ms (Old) vs 545.824 ms (New)
