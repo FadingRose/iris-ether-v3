@@ -107,6 +107,7 @@ func NewStack() *Stack {
 
 func NewAnyStack(cfg *CFG) *Stack {
 	stack := NewStack()
+	// Seed with abstract (nil inst/val) items to represent unknown input stack.
 	for range 16 {
 		stack.Push(&Reg{
 			inst:    nil,
@@ -149,7 +150,8 @@ func (s *Stack) GetAtPosition(pos int) *Reg {
 	if len(s.items) == 0 || pos >= len(s.items) || pos < 0 {
 		return nil
 	}
-	return s.items[pos]
+	// pos is counted from top of stack: 0 = top.
+	return s.items[len(s.items)-1-pos]
 }
 
 // Push adds an item to the top of the stack.
@@ -223,6 +225,7 @@ func (s *Stack) PushN(r *Reg, n int) {
 func (s *Stack) Hash() string {
 	h := sha256.New()
 	for _, reg := range s.items {
+		// Hash is value-based only; unknown values are encoded as "nil".
 		if reg.value() != nil {
 			h.Write([]byte(reg.value().String()))
 		} else {
